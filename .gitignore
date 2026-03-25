@@ -1,0 +1,40 @@
+# SQLite database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+.env
+*.egg-info/
+dist/
+build/
+
+# IDE and editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+
+# Obsidian (optional - if you want to keep only code in repo)
+# .obsidian/  # uncomment if you want to exclude Obsidian workspace settings
+
+# Local configuration
+config.local.*
+*.local.*
