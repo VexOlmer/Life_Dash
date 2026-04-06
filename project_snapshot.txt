@@ -1,0 +1,231 @@
+# Project Snapshot: Obsidian Analytics
+
+## Project Architecture
+```text
+Life_Dash/
+├── scripts
+│   └── maintenance.py
+├── src
+│   ├── common
+│   │   └── validators.py
+│   ├── core
+│   │   ├── config.py
+│   │   ├── database.py
+│   │   ├── exceptions.py
+│   │   └── logger.py
+│   ├── modules
+│   │   └── daily_notes
+│   │       ├── models.py
+│   │       ├── repository.py
+│   │       ├── router.py
+│   │       ├── schemas.py
+│   │       └── service.py
+│   ├── parser
+│   │   ├── engine.py
+│   │   ├── loaders.py
+│   │   ├── tasks.py
+│   │   └── transformers.py
+│   ├── web
+│   │   ├── static
+│   │   │   ├── css
+│   │   │   │   └── input.css
+│   │   │   └── js
+│   │   ├── templates
+│   │   │   └── components
+│   │   └── router.py
+│   └── main.py
+├── cli.py
+└── Видение сайта.txt
+```
+
+---
+
+## File Contents
+
+### FILE: `cli.py`
+```python
+
+```
+
+---
+
+### FILE: `scripts\maintenance.py`
+```python
+
+```
+
+---
+
+### FILE: `src\main.py`
+```python
+
+```
+
+---
+
+### FILE: `src\common\validators.py`
+```python
+
+```
+
+---
+
+### FILE: `src\core\config.py`
+```python
+"""
+
+"""
+
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from pathlib import Path
+
+
+class Settings(BaseSettings):
+    PROJECT_NAME:   str = "Life Dash"
+    OBSIDIAN_PATH:  Path
+    DATABASE_URL:   str
+    DEBUG:          bool = False
+
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+
+
+settings = Settings()
+
+```
+
+---
+
+### FILE: `src\core\database.py`
+```python
+"""
+
+"""
+
+
+from sqlmodel import create_engine, Session, SQLModel
+
+from .config import settings
+
+
+# connect_args нужны только для SQLite, чтобы избежать проблем с потоками
+engine = create_engine(
+    settings.DATABASE_URL, 
+    connect_args={"check_same_thread": False},
+    echo=settings.DEBUG  # Вывод всех SQL-запросы в консоль
+)
+
+
+def init_db():
+    """
+        Создает все таблицы, описанные в моделях
+    """
+    
+    SQLModel.metadata.create_all(engine)
+
+
+def get_session():
+    """
+        Генератор сессии для FastAPI
+    """
+    
+    with Session(engine) as session:
+        yield session
+        
+```
+
+---
+
+### FILE: `src\core\exceptions.py`
+```python
+
+```
+
+---
+
+### FILE: `src\core\logger.py`
+```python
+
+```
+
+---
+
+### FILE: `src\modules\daily_notes\models.py`
+```python
+
+```
+
+---
+
+### FILE: `src\modules\daily_notes\repository.py`
+```python
+
+```
+
+---
+
+### FILE: `src\modules\daily_notes\router.py`
+```python
+
+```
+
+---
+
+### FILE: `src\modules\daily_notes\schemas.py`
+```python
+
+```
+
+---
+
+### FILE: `src\modules\daily_notes\service.py`
+```python
+
+```
+
+---
+
+### FILE: `src\parser\engine.py`
+```python
+
+```
+
+---
+
+### FILE: `src\parser\loaders.py`
+```python
+
+```
+
+---
+
+### FILE: `src\parser\tasks.py`
+```python
+
+```
+
+---
+
+### FILE: `src\parser\transformers.py`
+```python
+
+```
+
+---
+
+### FILE: `src\web\router.py`
+```python
+
+```
+
+---
+
+### FILE: `src\web\static\css\input.css`
+```css
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+```
+
+---
+
