@@ -17,6 +17,8 @@ ENV/
 *.egg-info/
 dist/
 build/
+.ruff_cache/
+.mypy_cache/
 
 # IDE and editors
 .vscode/
