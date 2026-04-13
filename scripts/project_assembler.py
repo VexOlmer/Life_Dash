@@ -1,20 +1,18 @@
-"""
-    Сборка всех файлов в один общий .txt файл с созданием дерева архитектуры
-"""
+"""Сборка всех файлов в один общий .txt файл с созданием дерева архитектуры."""
 
 import os
 from pathlib import Path
 
 
-def assemble_project_code(output_filename="project_snapshot.txt"):
+def assemble_project_code(output_filename: str = "project_snapshot.txt") -> None:
     """
         Сборка всех файлов в один общий .txt файл с созданием дерева архитектуры.
         
         Args:
-            output_filename (str) - Наименование выходного файла.
+            output_filename: Наименование выходного файла.
         
         Returns:
-            None
+            None.
             
         Raises:
             Нет явных исключений.
@@ -36,21 +34,22 @@ def assemble_project_code(output_filename="project_snapshot.txt"):
     }
     # Конкретные исключения файлов
     excluded_files = {
-        output_filename, '.env', 'package-lock.json', 'poetry.lock', '.gitignore', 'LICENSE', 'README.md',
-        'pyproject.toml', 'mass_update_daily_notes.py', 'project_assembler.py'
+        output_filename, '.env', 'package-lock.json', 'poetry.lock', '.gitignore',
+        'LICENSE', 'README.md', 'pyproject.toml',
+        'mass_update_daily_notes.py', 'project_assembler.py'
     }
 
 
-    def generate_tree(current_dir, prefix=""):
+    def generate_tree(current_dir: str, prefix: str = "") -> list:
         """
             Рекурсивно создает древовидную структуру проекта.
             
             Args:
-                current_dir (str)   - Текущая директория для анализа;
-                prefix (str)        - Префикс для форматирования дерева (отступы).
+                current_dir: Текущая директория для анализа;
+                prefix: Префикс для форматирования дерева (отступы).
             
             Returns:
-                (list) - Список строк с древовидной структурой.
+                Список строк с древовидной структурой.
                 
             Raises:
                 Нет явных исключений.
@@ -62,7 +61,8 @@ def assemble_project_code(output_filename="project_snapshot.txt"):
                  if i not in excluded_dirs and i not in excluded_files]
         
         # Сортируем: сначала папки, потом файлы
-        items.sort(key=lambda x: (not os.path.isdir(os.path.join(current_dir, x)), x.lower()))
+        items.sort(key=lambda x: (not os.path.isdir(os.path.join(current_dir, x)),
+                                  x.lower()))
 
         for i, item in enumerate(items):
             path = os.path.join(current_dir, item)
@@ -79,7 +79,7 @@ def assemble_project_code(output_filename="project_snapshot.txt"):
 
 
     with open(output_path, 'w', encoding='utf-8') as outfile:
-        outfile.write(f"# Project Snapshot: Obsidian Analytics\n\n")
+        outfile.write("# Project Snapshot: Obsidian Analytics\n\n")
         
         # 1. Генерируем и записываем архитектуру проекта
         outfile.write("## Project Architecture\n")
@@ -100,11 +100,12 @@ def assemble_project_code(output_filename="project_snapshot.txt"):
                 relative_path = file_path.relative_to(root_dir)
 
                 # Пропускаем файлы с исключенными расширениями или именами
-                if file_path.suffix.lower() in excluded_extensions or file in excluded_files:
+                if (file_path.suffix.lower() in excluded_extensions or
+                    file in excluded_files):
                     continue
                 
                 try:
-                    with open(file_path, 'r', encoding='utf-8') as infile:
+                    with open(file_path, encoding='utf-8') as infile:
                         content = infile.read()
                     
                     outfile.write(f"### FILE: `{relative_path}`\n")
@@ -116,7 +117,7 @@ def assemble_project_code(output_filename="project_snapshot.txt"):
                     
                     outfile.write(f"```{lang}\n")
                     outfile.write(content)
-                    outfile.write(f"\n```\n\n---\n\n")
+                    outfile.write("\n```\n\n---\n\n")
                     
                 except Exception as e:
                     outfile.write(f"### FILE: `{relative_path}`\n")

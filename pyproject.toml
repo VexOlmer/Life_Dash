@@ -61,7 +61,12 @@ target-version = "py312"
 # N - проверка именования (PEP8/Google naming)
 # ANN - проверка аннотаций типов
 select = ["E", "F", "I", "UP", "B", "D", "N", "ANN"]
-ignore = []
+
+# Игнорируем спорные правила форматирования docstring
+# D202 - пустая строка после docstring
+# D208 - отступы в docstring
+# D212 - многострочный docstring начинается с первой строки
+ignore = ["D202", "D208", "D212", "D214"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
