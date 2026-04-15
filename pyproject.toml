@@ -66,7 +66,7 @@ select = ["E", "F", "I", "UP", "B", "D", "N", "ANN"]
 # D202 - пустая строка после docstring
 # D208 - отступы в docstring
 # D212 - многострочный docstring начинается с первой строки
-ignore = ["D202", "D208", "D212", "D214"]
+ignore = ["D202", "D208", "D212", "D214", "E501"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"

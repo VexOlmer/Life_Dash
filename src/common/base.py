@@ -1,0 +1,72 @@
+"""Базовые классы для работы с данными."""
+
+from typing import Generic, TypeVar
+
+from sqlmodel import Session, SQLModel, select
+
+# T — это тип нашей модели (Book, Game и т.д.)
+T = TypeVar("T", bound=SQLModel)
+
+
+class BaseRepository(Generic[T]):
+    """Базовый репозиторий для CRUD операций."""
+
+    def __init__(self, session: Session, model_type: type[T]) -> None:
+        """
+            Инициализирует репозиторий.
+
+            Args:
+                session: Сессия базы данных.
+                model_type: Класс модели (напр. Book).
+        """
+        
+        self.session = session
+        self.model_type = model_type
+
+    def get_by_path(self, relative_path: str) -> T | None:
+        """
+            Находит запись по пути к файлу.
+
+            Args:
+                relative_path: Относительный путь от корня Vault.
+        """
+        
+        # Мы предполагаем, что у всех моделей будет поле file_path
+        statement = select(self.model_type).where(
+            self.model_type.file_path == relative_path  # type: ignore
+        )
+        return self.session.exec(statement).first()
+
+    def upsert(self, instance: T) -> None:
+        """
+            Обновляет существующую запись или создает новую.
+
+            Args:
+                instance: Экземпляр модели.
+        """
+        
+        existing = self.get_by_path(instance.file_path)  # type: ignore
+
+        if existing:
+            # Превращаем модель в словарь и обновляем поля
+            data = instance.model_dump(exclude={"id"})
+            for key, value in data.items():
+                setattr(existing, key, value)
+            self.session.add(existing)
+        else:
+            self.session.add(instance)
+        
+        self.session.commit()
+
+    def delete_by_path(self, relative_path: str) -> None:
+        """
+            Удаляет запись из БД.
+
+            Args:
+                relative_path: Относительный путь к файлу.
+        """
+        
+        instance = self.get_by_path(relative_path)
+        if instance:
+            self.session.delete(instance)
+            self.session.commit()
