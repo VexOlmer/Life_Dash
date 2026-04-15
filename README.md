@@ -115,12 +115,7 @@ Life_Dash/
 │   │   │   ├── repository.py       # Работа с БД (CRUD: get, upsert, delete)
 │   │   │   ├── service.py          # Бизнес-логика (генерация MD из шаблона, аналитика)
 │   │   │   ├── transformer.py      # Модульный парсер (YAML + Regex именно для книг)
-│   │   │   ├── router.py           # API эндпоинты модуля (/api/books)
-│   │   │
-│   │   ├── games/                  # Модуль "Игры" (аналогичная структура)
-│   │   ├── cinema/                 # Модуль "Кино и Сериалы"
-│   │   ├── daily/                  # Модуль "Ежедневные заметки" (Сон, Тренировки, Траты)
-│   │   └── weekly/                 # Модуль "Еженедельные итоги" (Вес, Агрегация)
+│   │   │   └── router.py           # API эндпоинты модуля (/api/books)
 │   │
 │   ├── parser/                     # Общая ETL-система (Obsidian -> DB)
 │   │   ├── engine.py               # Низкоуровневый сканер файлов (os.walk, mtime)
@@ -128,10 +123,10 @@ Life_Dash/
 │   │
 │   └── web/                        # Веб-интерфейс (Server-Side Rendering)
 │       ├── router.py               # Роуты для страниц (/, /dashboard, /settings)
-│       ├── static/                 # CSS (Tailwind), JS (HTMX), Иконки
+│       ├── static/                 # CSS, JS
 │       └── templates/              # HTML шаблоны (Jinja2)
-│           ├── components/         # UI блоки (navbar, card, sync_report)
-│           ├── pages/              # Шаблоны целых страниц (index, books, daily)
+│           ├── components/         # UI блоки (sync_report)
+│           ├── pages/              # Шаблоны целых страниц (index, books, book_detail)
 │           └── layout.html         # Базовый скелет (head, scripts, body)
 │
 ├── scripts/                        # Вспомогательные скрипты

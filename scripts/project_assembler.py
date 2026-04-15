@@ -25,7 +25,8 @@ def assemble_project_code(output_filename: str = "project_snapshot.txt") -> None
     # Исключения папок
     excluded_dirs = {
         '.git', '__pycache__', '.venv', 'venv', 'env', 
-        'data', 'logs', 'node_modules', '.idea', '.vscode', 'tests'
+        'data', 'logs', 'node_modules', '.idea', '.vscode', 'tests',
+        '.ruff_cache', '.mypy_cache'
     }
     # Исключения расширения папок
     excluded_extensions = {

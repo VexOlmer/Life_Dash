@@ -4,54 +4,47 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Obsidian Analytics</title>
+    <!-- Подключаем современный шрифт Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
     
-    <!-- Подключаем наш кастомный CSS из статики -->
     <link rel="stylesheet" href="{{ url_for('static', path='css/style.css') }}">
-    
-    <!-- Подключаем HTMX (для динамической синхронизации без перезагрузки) -->
     <script src="https://unpkg.com/htmx.org@2.0.0"></script>
-    
-    <!-- Иконки (опционально, используем стандартные эмодзи для простоты) -->
 </head>
 <body>
 
-    <!-- Навигационная панель -->
     <nav class="navbar">
         <div class="nav-container">
-            <div class="nav-brand">
-                <a href="/">🏠 Obsidian Dash</a>
-            </div>
+            <a href="/" class="nav-logo">
+                🪐 Life<span>Dash</span>
+            </a>
             <ul class="nav-links">
-                <li><a href="/books">📚 Книги</a></li>
-                <li><a href="/games" class="disabled-link">🎮 Игры</a></li>
-                <li><a href="/movies" class="disabled-link">🎬 Кино</a></li>
-                <li><a href="/daily" class="disabled-link">📅 Дневник</a></li>
-                <li><a href="/weekly" class="disabled-link">📊 Итоги</a></li>
+                <li><a href="/books" class="active">Книги</a></li>
+                <li><a href="#" class="disabled">Игры</a></li>
+                <li><a href="#" class="disabled">Кино</a></li>
+                <li><a href="#" class="disabled">Итоги</a></li>
             </ul>
         </div>
     </nav>
 
-    <!-- Основной контент страницы -->
-    <main class="main-container">
-        <!-- Сюда Jinja2 будет вставлять содержимое из других шаблонов (books.html и т.д.) -->
+    <main class="main-content">
         {% block content %}{% endblock %}
     </main>
 
-    <!-- Подвал сайта -->
     <footer class="footer">
-        <div class="container">
-            <p>&copy; 2024 Obsidian Analytics Web App</p>
-            <p style="font-size: 0.8rem; color: #95a5a6;">Локальный проект для анализа базы знаний</p>
+        <div class="footer-inner">
+            <div class="footer-logo">💠 Obsidian<span>Dash</span></div>
+            <div class="footer-links">
+                <a href="#" onclick="window.scrollTo({top: 0, behavior: 'smooth'}); return false;">Наверх ↑</a>
+            </div>
         </div>
     </footer>
 
-    <!-- Глобальные настройки HTMX (индикатор загрузки и т.д.) -->
     <script>
-        document.body.addEventListener('htmx:beforeSend', function(evt) {
-            console.log('HTMX: Отправка запроса...');
-        });
-        document.body.addEventListener('htmx:afterRequest', function(evt) {
-            console.log('HTMX: Запрос завершен.');
+        // Анимация появления контента
+        document.body.addEventListener('htmx:afterOnLoad', function() {
+            console.log('Content loaded');
         });
     </script>
 </body>

@@ -19,14 +19,49 @@ SessionDep = Annotated[Session, Depends(get_session)]
 
 
 @router.get("/", response_class=HTMLResponse)
-async def list_books(request: Request, session: SessionDep): # noqa: ANN201
-    """Отображает страницу со списком книг."""
-    statement = select(Book).order_by(Book.total_rating.desc())
+async def list_books(
+    request: Request, 
+    session: SessionDep, 
+    sort: str = "total_rating",
+    order: str = "desc"
+):
+    """Список книг с универсальной сортировкой."""
+    
+    # Получаем атрибут модели динамически
+    column = getattr(Book, sort, Book.total_rating)
+    
+    # Применяем направление
+    expression = column.desc() if order == "desc" else column.asc()
+    
+    statement = select(Book).order_by(expression)
     books = session.exec(statement).all()
+    
+    # Словарь понятных названий для кнопки
+    labels = {
+        "total_rating": "Общий рейтинг",
+        "total": "Количество страниц",
+        "rating_characters": "Герои",
+        "rating_plot": "Сюжет",
+        "rating_size": "Объем",
+        "rating_prose": "Слог",
+        "rating_ending": "Финал",
+        "rating_depth": "Глубина",
+        "rating_atmosphere": "Атмосфера",
+        "rating_rereadability": "Перечитывание",
+        "rating_expected_real": "Ожидание/Реальность",
+        "rating_recommend": "Рекомендация"
+    }
     
     return templates.TemplateResponse(
         "pages/books.html", 
-        {"request": request, "books": books}
+        {
+            "request": request, 
+            "books": books, 
+            "current_sort": sort,
+            "current_order": order,
+            "sort_label": labels.get(sort, "Сортировка"),
+            "labels": labels
+        }
     )
 
 @router.post("/sync")

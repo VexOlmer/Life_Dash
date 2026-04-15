@@ -1,12 +1,61 @@
 {% extends "layout.html" %}
 
 {% block content %}
-<div style="text-align: center; margin-top: 5rem;">
-    <h1 style="font-size: 3rem; color: #2c3e50;">Добро пожаловать в Obsidian Dash</h1>
-    <p style="font-size: 1.2rem; color: #7f8c8d;">Ваша база знаний теперь под контролем аналитики.</p>
+<div style="display: flex; align-items: center; gap: 2rem; margin-bottom: 4rem;">
+    <!-- Тот самый "смайлик" или иконка, но в более строгом стиле -->
+    <div style="font-size: 4rem; background: white; width: 100px; height: 100px; display: flex; align-items: center; justify-content: center; border-radius: 24px; box-shadow: var(--shadow);">
+        🪐
+    </div>
+    <div>
+        <h1 style="font-size: 3.5rem; font-weight: 800; margin: 0; letter-spacing: -2px;">Life Dash</h1>
+        <div style="display: flex; gap: 10px; margin-top: 5px;">
+            <span class="tag" style="background: #f1f5f9; color: #475569;">Personal Dashboard</span>
+        </div>
+    </div>
+</div>
+
+<div class="stats-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 2rem;">
     
-    <div style="margin-top: 3rem;">
-        <a href="/books" class="btn" style="padding: 1rem 2rem; font-size: 1.2rem;">Перейти к Книгам 📚</a>
+    <!-- Модуль Книги: Расширенная статистика -->
+    <div class="stat-card" style="background: white; padding: 2rem; border-radius: 24px; border: 1px solid #e2e8f0; box-shadow: var(--shadow);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+            <h2 style="margin: 0; font-size: 1.5rem; font-weight: 700;">📚 Книги</h2>
+            <a href="/books" class="btn-primary" style="padding: 6px 14px; font-size: 0.8rem;">Открыть</a>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+            <div>
+                <span style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">Всего</span>
+                <p style="font-size: 2rem; font-weight: 800; margin: 0;">{{ stats.books.total }}</p>
+            </div>
+            <div>
+                <span style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">Средний балл</span>
+                <p style="font-size: 2rem; font-weight: 800; margin: 0; color: #f59e0b;">{{ stats.books.avg }}</p>
+            </div>
+            <div style="grid-column: span 2; background: #f8fafc; padding: 1rem; border-radius: 12px; display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <span style="font-size: 0.8rem; color: var(--text-muted);">Прочитано страниц:</span>
+                    <strong style="margin-left: 5px;">{{ stats.books.pages }}</strong>
+                </div>
+                <div style="text-align: right;">
+                    <span style="font-size: 0.8rem; color: var(--text-muted);">В процессе:</span>
+                    <strong style="margin-left: 5px; color: var(--primary);">{{ stats.books.reading }}</strong>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Заглушки для будущих модулей (чтобы сетка не была пустой) -->
+    <div style="background: rgba(255,255,255,0.4); border: 2px dashed #e2e8f0; padding: 2rem; border-radius: 24px; display: flex; flex-direction: column; justify-content: center; align-items: center; color: #cbd5e1;">
+        <span style="font-size: 2rem; margin-bottom: 1rem;">🎮</span>
+        <span style="font-weight: 600; font-size: 1.1rem;">Игры</span>
+        <span style="font-size: 0.8rem;">Модуль в разработке</span>
+    </div>
+
+    <div style="background: rgba(255,255,255,0.4); border: 2px dashed #e2e8f0; padding: 2rem; border-radius: 24px; display: flex; flex-direction: column; justify-content: center; align-items: center; color: #cbd5e1;">
+        <span style="font-size: 2rem; margin-bottom: 1rem;">🎬</span>
+        <span style="font-weight: 600; font-size: 1.1rem;">Кино</span>
+        <span style="font-size: 0.8rem;">Модуль в разработке</span>
     </div>
 </div>
 {% endblock %}

@@ -7,6 +7,8 @@ Life_Dash/
 │   └── maintenance.py
 ├── src
 │   ├── common
+│   │   ├── base.py
+│   │   ├── utils.py
 │   │   └── validators.py
 │   ├── core
 │   │   ├── config.py
@@ -14,28 +16,31 @@ Life_Dash/
 │   │   ├── exceptions.py
 │   │   └── logger.py
 │   ├── modules
-│   │   └── daily_notes
+│   │   └── books
 │   │       ├── models.py
 │   │       ├── repository.py
 │   │       ├── router.py
-│   │       ├── schemas.py
-│   │       └── service.py
+│   │       ├── service.py
+│   │       └── transformer.py
 │   ├── parser
 │   │   ├── engine.py
-│   │   ├── loaders.py
-│   │   ├── tasks.py
-│   │   └── transformers.py
+│   │   └── sync.py
 │   ├── web
 │   │   ├── static
 │   │   │   ├── css
-│   │   │   │   └── input.css
+│   │   │   │   └── style.css
 │   │   │   └── js
 │   │   ├── templates
-│   │   │   └── components
+│   │   │   ├── components
+│   │   │   │   └── sync_report.html
+│   │   │   ├── pages
+│   │   │   │   ├── book_detail.html
+│   │   │   │   ├── books.html
+│   │   │   │   └── index.html
+│   │   │   └── layout.html
 │   │   └── router.py
 │   └── main.py
-├── cli.py
-└── Видение сайта.txt
+└── cli.py
 ```
 
 ---
@@ -51,12 +56,171 @@ Life_Dash/
 
 ### FILE: `scripts\maintenance.py`
 ```python
+"""Очистка БД."""
 
 ```
 
 ---
 
 ### FILE: `src\main.py`
+```python
+"""Главный модуль приложения Obsidian Analytics."""
+
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
+
+import uvicorn
+from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+
+from src.core.config import settings
+from src.core.database import init_db
+from src.core.logger import logger
+from src.modules.books.router import router as books_router
+from src.web.router import router as web_router
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    """
+        Управляет жизненным циклом приложения.
+
+        Выполняет инициализацию базы данных при запуске и логирует
+        события старта и остановки.
+
+        Args:
+            app: Экземпляр приложения FastAPI.
+    """
+    
+    # --- Действия при запуске (Startup) ---
+    logger.info("Запуск приложения Obsidian Analytics...")
+    init_db()
+    
+    yield  # Принятие запросов приложением
+    
+    # --- Действия при остановке (Shutdown) ---
+    logger.info("Остановка приложения...")
+
+
+app = FastAPI(
+    title="Obsidian Analytics",
+    description="Аналитический дашборд для базы знаний Obsidian",
+    version="0.1.0",
+    debug=settings.DEBUG,
+    lifespan=lifespan,
+)
+app.mount("/static", StaticFiles(directory="src/web/static"), name="static")
+
+app.include_router(web_router)    # Главная страница (/)
+app.include_router(books_router)  # Модуль книг (/books)
+
+
+@app.get("/health")
+async def health_check() -> dict[str, str | bool]:
+    """
+        Проверка доступности API и базы знаний.
+
+        Returns:
+            dict: Статус приложения и доступность Vault.
+    """
+    
+    return {
+        "status": "online",
+        "vault_ready": settings.OBSIDIAN_VAULT_PATH.exists(),
+        "vault_path": str(settings.OBSIDIAN_VAULT_PATH),
+    }
+
+
+if __name__ == "__main__":
+    uvicorn.run(
+        "src.main:app",
+        host=settings.HOST,
+        port=settings.PORT,
+        reload=settings.DEBUG,
+    )
+```
+
+---
+
+### FILE: `src\common\base.py`
+```python
+"""Базовые классы для работы с данными."""
+
+from typing import Generic, TypeVar
+
+from sqlmodel import Session, SQLModel, select
+
+# T — это тип нашей модели (Book, Game и т.д.)
+T = TypeVar("T", bound=SQLModel)
+
+
+class BaseRepository(Generic[T]):
+    """Базовый репозиторий для CRUD операций."""
+
+    def __init__(self, session: Session, model_type: type[T]) -> None:
+        """
+            Инициализирует репозиторий.
+
+            Args:
+                session: Сессия базы данных.
+                model_type: Класс модели (напр. Book).
+        """
+        
+        self.session = session
+        self.model_type = model_type
+
+    def get_by_path(self, relative_path: str) -> T | None:
+        """
+            Находит запись по пути к файлу.
+
+            Args:
+                relative_path: Относительный путь от корня Vault.
+        """
+        
+        # Мы предполагаем, что у всех моделей будет поле file_path
+        statement = select(self.model_type).where(
+            self.model_type.file_path == relative_path  # type: ignore
+        )
+        return self.session.exec(statement).first()
+
+    def upsert(self, instance: T) -> None:
+        """
+            Обновляет существующую запись или создает новую.
+
+            Args:
+                instance: Экземпляр модели.
+        """
+        
+        existing = self.get_by_path(instance.file_path)  # type: ignore
+
+        if existing:
+            # Превращаем модель в словарь и обновляем поля
+            data = instance.model_dump(exclude={"id"})
+            for key, value in data.items():
+                setattr(existing, key, value)
+            self.session.add(existing)
+        else:
+            self.session.add(instance)
+        
+        self.session.commit()
+
+    def delete_by_path(self, relative_path: str) -> None:
+        """
+            Удаляет запись из БД.
+
+            Args:
+                relative_path: Относительный путь к файлу.
+        """
+        
+        instance = self.get_by_path(relative_path)
+        if instance:
+            self.session.delete(instance)
+            self.session.commit()
+```
+
+---
+
+### FILE: `src\common\utils.py`
 ```python
 
 ```
@@ -72,159 +236,935 @@ Life_Dash/
 
 ### FILE: `src\core\config.py`
 ```python
-"""
+"""Модуль конфигурации приложения."""
 
-"""
-
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pathlib import Path
 
 
 class Settings(BaseSettings):
-    PROJECT_NAME:   str = "Life Dash"
-    OBSIDIAN_PATH:  Path
-    DATABASE_URL:   str
-    DEBUG:          bool = False
+    """
+        Настройки приложения, загружаемые из .env файла.
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+        Attributes:
+            OBSIDIAN_VAULT_PATH: Абсолютный путь к базе знаний Obsidian.
+            BOOKS_PATH: Путь к книгам относительно корня Vault.
+            GAMES_PATH: Путь к играм относительно корня Vault.
+            MOVIES_PATH: Путь к фильмам относительно корня Vault.
+            SERIES_PATH: Путь к сериалам относительно корня Vault.
+            DAILY_PATH: Путь к дневным заметкам относительно корня Vault.
+            WEEKLY_PATH: Путь к недельным заметкам относительно корня Vault.
+            DATABASE_URL: URL подключения к базе данных SQLite.
+            DEBUG: Режим отладки.
+            HOST: Хост для запуска сервера.
+            PORT: Порт для запуска сервера.
+    """
+
+    OBSIDIAN_VAULT_PATH: Path
+
+    BOOKS_PATH: str = "notes/books"
+    GAMES_PATH: str = "notes/games"
+    MOVIES_PATH: str = "notes/movies_series/movies"
+    SERIES_PATH: str = "notes/movies_series/series"
+    DAILY_PATH: str = "periodic/daily"
+    WEEKLY_PATH: str = "periodic/weekly"
+
+    DATABASE_URL: str = "sqlite:///./data/db.sqlite"
+
+    DEBUG: bool = True
+    HOST: str = "127.0.0.1"
+    PORT: int = 8000
+
+    # Настройка поиска .env файла внутри папки src/core
+    model_config = SettingsConfigDict(
+        env_file=Path(__file__).parent / ".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
 
 settings = Settings()
-
 ```
 
 ---
 
 ### FILE: `src\core\database.py`
 ```python
-"""
+"""Модуль управления базой данных."""
 
-"""
+from collections.abc import Generator
+from pathlib import Path
 
+from sqlmodel import Session, SQLModel, create_engine
 
-from sqlmodel import create_engine, Session, SQLModel
+from src.core.config import settings
+from src.core.logger import logger
 
-from .config import settings
-
-
-# connect_args нужны только для SQLite, чтобы избежать проблем с потоками
-engine = create_engine(
-    settings.DATABASE_URL, 
-    connect_args={"check_same_thread": False},
-    echo=settings.DEBUG  # Вывод всех SQL-запросы в консоль
-)
+# Создаем движок (echo=True в режиме дебага выводит SQL-запросы в консоль)
+engine = create_engine(settings.DATABASE_URL, echo=settings.DEBUG)
 
 
-def init_db():
+def init_db() -> None:
     """
-        Создает все таблицы, описанные в моделях
+        Инициализирует базу данных.
+
+        Создает папку data и все таблицы, описанные в моделях SQLModel.
     """
     
-    SQLModel.metadata.create_all(engine)
+    try:
+        # Убеждаемся, что папка для БД существует
+        db_path = Path("data")
+        db_path.mkdir(exist_ok=True)
+
+        SQLModel.metadata.create_all(engine)
+        logger.info("База данных успешно инициализирована.")
+    except Exception as e:
+        logger.error(f"Критическая ошибка при инициализации БД: {e}")
+        raise
 
 
-def get_session():
+def get_session() -> Generator[Session, None, None]:
     """
-        Генератор сессии для FastAPI
+        Создает сессию базы данных.
+
+        Yields:
+            Session: Активная сессия SQLModel.
     """
     
     with Session(engine) as session:
         yield session
-        
 ```
 
 ---
 
 ### FILE: `src\core\exceptions.py`
 ```python
+"""Кастомные исключения для проекта."""
 
+class ValidationError(Exception):
+    """Исключение, возникающее при отсутствии обязательных полей в заметке."""
+    pass
 ```
 
 ---
 
 ### FILE: `src\core\logger.py`
 ```python
+"""Модуль настройки логирования."""
 
+import sys
+from pathlib import Path
+
+from loguru import logger
+
+
+def setup_logger() -> None:
+    """
+        Конфигурирует Loguru для вывода в консоль и файл.
+
+        Создает директорию logs, если она отсутствует. Настраивает ротацию
+            и уровень фильтрации логов.
+    """
+    
+    log_dir = Path("logs")
+    log_dir.mkdir(exist_ok=True)
+
+    logger.remove()
+
+    # Красивый цветной вывод в консоль
+    logger.add(
+        sys.stdout,
+        format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
+        "<level>{level: <8}</level> | "
+        "<cyan>{message}</cyan>",
+        level="INFO",
+    )
+
+    # Запись критических ошибок в файл (с ротацией каждые 10МБ)
+    logger.add(
+        log_dir / "app.log",
+        rotation="10 MB",
+        retention="10 days",
+        level="ERROR",
+        encoding="utf-8",
+        compression="zip",
+    )
+
+
+setup_logger()
 ```
 
 ---
 
-### FILE: `src\modules\daily_notes\models.py`
+### FILE: `src\modules\books\models.py`
 ```python
+"""Модели данных для модуля книг."""
 
+from sqlmodel import Field, SQLModel
+
+
+class Book(SQLModel, table=True):
+    """Модель книги на основе расширенного шаблона Obsidian."""
+
+    id: int | None = Field(default=None, primary_key=True)
+
+    # Основная информация (YAML)
+    title: str
+    title_orig: str | None = None
+    author: str = "Unknown"
+    country_author: str | None = None
+    year: int | None = None
+    total: int = 0
+    isbn: str | None = None
+    status: str = "finished"
+    genres: str = ""
+    series: str | None = None
+    format: str | None = None
+    language: str | None = None
+    
+    # Даты (храним как строки, так как формат в шаблоне специфичный)
+    started: str | None = None
+    finished: str | None = None
+
+    # Рейтинги (10 параметров)
+    rating_characters: float = 0.0
+    rating_plot: float = 0.0
+    rating_size: float = 0.0
+    rating_prose: float = 0.0
+    rating_ending: float = 0.0
+    rating_depth: float = 0.0
+    rating_atmosphere: float = 0.0
+    rating_rereadability: float = 0.0
+    rating_expected_real: float = 0.0
+    rating_recommend: float = 0.0
+    
+    # Итоговый рейтинг (сумма 10 параметров)
+    total_rating: float = 0.0
+    
+    # Цвета фона и текста
+    bg_color: str = Field(default="#ffffff")
+    text_color: str = Field(default="#000000")
+
+    # Служебные поля
+    file_path: str = Field(unique=True, index=True)
+    last_modified: float
+    created_at: str | None = None  # Из поля created в YAML
 ```
 
 ---
 
-### FILE: `src\modules\daily_notes\repository.py`
+### FILE: `src\modules\books\repository.py`
 ```python
+"""Репозиторий для работы с книгами в БД."""
 
+from sqlmodel import Session
+
+from src.common.base import BaseRepository
+
+from .models import Book
+
+
+class BookRepository(BaseRepository[Book]):
+    """Репозиторий для управления данными книг."""
+
+    def __init__(self, session: Session) -> None:
+        """Инициализирует репозиторий книг."""
+        super().__init__(session, Book)
 ```
 
 ---
 
-### FILE: `src\modules\daily_notes\router.py`
+### FILE: `src\modules\books\router.py`
 ```python
+"""Роутер для управления разделом книг."""
 
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
+from sqlmodel import Session, select
+
+from src.core.database import get_session
+from src.parser.sync import sync_books
+
+from .models import Book
+from .service import BookService
+
+router = APIRouter(prefix="/books", tags=["Books"])
+templates = Jinja2Templates(directory="src/web/templates")
+SessionDep = Annotated[Session, Depends(get_session)]
+
+
+@router.get("/", response_class=HTMLResponse)
+async def list_books(request: Request, session: SessionDep): # noqa: ANN201
+    """Отображает страницу со списком книг."""
+    statement = select(Book).order_by(Book.total_rating.desc())
+    books = session.exec(statement).all()
+    
+    return templates.TemplateResponse(
+        "pages/books.html", 
+        {"request": request, "books": books}
+    )
+
+@router.post("/sync")
+async def sync_books_endpoint(request: Request, session: SessionDep): # noqa: ANN201
+    """Запускает синхронизацию книг."""
+    stats = sync_books(session)
+    return templates.TemplateResponse(
+        "components/sync_report.html", 
+        {"request": request, "stats": stats}
+    )
+
+@router.get("/{book_id}")
+async def book_detail(request: Request, book_id: int, session: SessionDep): # noqa: ANN201
+    """Детальная страница книги."""
+    book = session.get(Book, book_id)
+    if not book:
+        raise HTTPException(status_code=404, detail="Книга не найдена")
+
+    # Получаем динамический контент из файла
+    extra_content = BookService.get_book_content(book.file_path)
+
+    return templates.TemplateResponse(
+        "pages/book_detail.html", 
+        {
+            "request": request, 
+            "book": book, 
+            "content": extra_content
+        }
+    )
 ```
 
 ---
 
-### FILE: `src\modules\daily_notes\schemas.py`
+### FILE: `src\modules\books\service.py`
 ```python
+"""Сервис для динамического извлечения контента из заметок Obsidian."""
 
+import re
+from pathlib import Path
+
+from src.core.config import settings
+
+
+class BookService:
+    """Сервис для работы с содержимым файлов книг."""
+
+    @staticmethod
+    def get_book_content(relative_path: str) -> dict[str, str]:
+        """
+            Парсит файл и извлекает специфические разделы по заголовкам.
+            
+            Args:
+                relative_path: Путь к файлу в Obsidian Vault.
+        """
+        
+        full_path = settings.OBSIDIAN_VAULT_PATH / relative_path
+        if not full_path.exists():
+            return {}
+
+        content = full_path.read_text(encoding="utf-8")
+
+        # Универсальная функция для поиска контента между заголовками
+        def extract_section(header_name: str) -> str:
+            # Ищем заголовок, затем забираем всё до следующего ## или --- или конца файла
+            # Флаг re.DOTALL позволяет точке . захватывать переносы строк
+            pattern = rf"{re.escape(header_name)}(.*?)(?=\n##|\n---|\Z)"
+            match = re.search(pattern, content, re.DOTALL)
+            if match:
+                return match.group(1).strip()
+            return ""
+
+        return {
+            "main_characters": extract_section("## 👤 Главные герои"),
+            "side_characters": extract_section("## 👤 Второстепенные герои"),
+            "impression": extract_section("## ❤️ Моё впечатление"),
+            "quotes": extract_section("## 📝 Цитаты"),
+        }
 ```
 
 ---
 
-### FILE: `src\modules\daily_notes\service.py`
+### FILE: `src\modules\books\transformer.py`
 ```python
+"""Модуль трансформации заметок о книгах."""
 
+from pathlib import Path
+
+import frontmatter
+
+from src.core.exceptions import ValidationError
+
+from .models import Book
+
+
+class BookTransformer:
+    """Трансформер для обработки расширенного YAML книг."""
+    
+    @staticmethod
+    def transform(file_path: Path, vault_path: Path, mtime: float) -> Book:
+        """Превращает Markdown файл в объект Book с расчетом суммы рейтинга."""
+        
+        post = frontmatter.load(file_path)
+        meta = post.metadata
+        
+        rel_path = str(file_path.relative_to(vault_path))
+
+        # 1. Проверка 10 параметров рейтинга
+        rating_keys = [
+            "rating_characters", "rating_plot", "rating_size", 
+            "rating_prose", "rating_ending", "rating_depth", 
+            "rating_atmosphere", "rating_rereadability", 
+            "rating_expected_real", "rating_recommend"
+        ]
+        
+        total_score = 0.0
+        ratings_data = {}
+        for key in rating_keys:
+            val = meta.get(key)
+            # Проверяем, что значение есть и оно числовое (не None и не пустая строка)
+            if val is None or val == "":
+                raise ValidationError(f"Пропущен обязательный рейтинг: {key}")
+            try:
+                numeric_val = float(val)
+                ratings_data[key] = numeric_val
+                total_score += numeric_val
+            except ValueError as e:
+                raise ValidationError(f"Рейтинг {key} должен быть числом") from e
+
+        # 2. Проверка обязательных метаданных
+        required_meta = {
+            "author": "Автор",
+            "country_author": "Страна автора",
+            "total": "Количество страниц (total)",
+            "year": "Год",
+            "status": "Статус",
+            "genres": "Жанры",
+            "format": "Формат",
+            "language": "Язык",
+            "bg_color": "Цвет фона",
+            "text_color": "Цвет текста"
+        }
+
+        for key, label in required_meta.items():
+            if not meta.get(key):
+                raise ValidationError(f"Поле '{label}' ({key}) не заполнено")
+
+        # 3. Валидация жанров (от 1 до 3)
+        genres_raw = meta.get("genres", "")
+        if isinstance(genres_raw, list):
+            genre_list = [str(g).strip() for g in genres_raw if g]
+        else:
+            genre_list = [g.strip() for g in str(genres_raw).split(",") if g.strip()]
+        
+        if not (1 <= len(genre_list) <= 3):
+            raise ValidationError(f"Должно быть от 1 до 3 жанров (сейчас: {len(genre_list)})")
+
+        # 4. Валидация HEX-цветов (должны начинаться с #)
+        for color_key in ["bg_color", "text_color"]:
+            color = str(meta.get(color_key, ""))
+            if not color.startswith("#") or len(color) not in [4, 7]:
+                raise ValidationError(f"Поле {color_key} должно быть в формате HEX (#ffffff)")
+
+        # Если все проверки прошли, создаем объект
+        return Book(
+            title=meta.get("title", file_path.stem),
+            title_orig=meta.get("title_orig"),
+            author=meta.get("author"),
+            country_author=meta.get("country_author"),
+            year=int(meta.get("year", 0)),
+            total=int(meta.get("total", 0)),
+            isbn=meta.get("isbn"),
+            status=meta.get("status"),
+            genres=", ".join(genre_list),
+            series=meta.get("series"),
+            format=meta.get("format"),
+            language=meta.get("language"),
+            started=meta.get("started"),
+            finished=meta.get("finished"),
+            bg_color=str(meta.get("bg_color")),
+            text_color=str(meta.get("text_color")),
+            total_rating=total_score,
+            file_path=rel_path,
+            last_modified=mtime,
+            created_at=str(meta.get("created", "")),
+            **ratings_data
+        )
 ```
 
 ---
 
 ### FILE: `src\parser\engine.py`
 ```python
+"""Модуль сканирования файлов Obsidian."""
 
+import os
+from pathlib import Path
+
+from src.core.logger import logger
+
+
+class ScannerEngine:
+    """Инструмент для поиска файлов в базе знаний."""
+
+    @staticmethod
+    def scan_folder(folder_path: Path, extension: str = ".md") -> list[tuple[Path, float]]:
+        """
+            Сканирует директорию и возвращает пути к файлам и дату изменения.
+
+            Args:
+                folder_path: Абсолютный путь к папке.
+                extension: Расширение файлов (по умолчанию .md).
+
+            Returns:
+                list[tuple[Path, float]]: Список (Путь, Timestamp).
+        """
+        
+        files_data: list[tuple[Path, float]] = []
+
+        if not folder_path.exists():
+            logger.error(f"Папка не найдена: {folder_path}")
+            return files_data
+
+        for root, _, files in os.walk(folder_path):
+            for file in files:
+                if file.endswith(extension):
+                    path = Path(root) / file
+                    try:
+                        mtime = os.path.getmtime(path)
+                        files_data.append((path, mtime))
+                    except OSError as e:
+                        logger.warning(f"Не удалось прочитать mtime файла {path}: {e}")
+        
+        return files_data
 ```
 
 ---
 
-### FILE: `src\parser\loaders.py`
+### FILE: `src\parser\sync.py`
 ```python
+"""Оркестратор синхронизации книг."""
 
-```
+from pathlib import Path
 
----
+from src.core.config import settings
+from src.core.exceptions import ValidationError
+from src.core.logger import logger
+from src.modules.books.repository import BookRepository
+from src.modules.books.transformer import BookTransformer
 
-### FILE: `src\parser\tasks.py`
-```python
+from .engine import ScannerEngine
 
-```
 
----
+def sync_books(session) -> dict:  # noqa: ANN001
+    """
+        Синхронизация заметок из базы знаний с БД.
+    
+        Если обработка заметки завершилась ошибкой, она не будет добавлена в БД.
+    """
+    vault_path = Path(settings.OBSIDIAN_VAULT_PATH)
+    books_folder = vault_path / settings.BOOKS_PATH
+    
+    scanner = ScannerEngine()
+    repo = BookRepository(session)
+    
+    files = scanner.scan_folder(books_folder)
+    
+    stats = {"total": len(files), "updated": 0, "errors": 0, "error_details": []}
+    
+    for f_path, mtime in files:
+        rel_path = str(f_path.relative_to(vault_path))
+        
+        db_item = repo.get_by_path(rel_path)
+        if db_item and db_item.last_modified >= mtime:
+            continue
+            
+        try:
+            book_obj = BookTransformer.transform(f_path, vault_path, mtime)
+            repo.upsert(book_obj)
+            stats["updated"] += 1
+        except ValidationError as e:
+            logger.warning(f"Ошибка валидации в {rel_path}: {e}")
+            stats["errors"] += 1
+            stats["error_details"].append({"file": rel_path, "error": str(e)})
+        except Exception as e:
+            logger.error(f"Ошибка в {rel_path}: {e}")
+            stats["errors"] += 1
 
-### FILE: `src\parser\transformers.py`
-```python
-
+    return stats
 ```
 
 ---
 
 ### FILE: `src\web\router.py`
 ```python
+"""Роутер для основных страниц сайта."""
 
+from fastapi import APIRouter, Request
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
+
+router = APIRouter(tags=["Web"])
+templates = Jinja2Templates(directory="src/web/templates")
+
+@router.get("/", response_class=HTMLResponse)
+async def index(request: Request) -> HTMLResponse:
+    """Главная страница приложения."""
+    return templates.TemplateResponse("pages/index.html", {"request": request})
 ```
 
 ---
 
-### FILE: `src\web\static\css\input.css`
+### FILE: `src\web\static\css\style.css`
 ```css
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* Базовые стили */
+body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; background: #f4f7f6; }
+nav { background: #2c3e50; color: white; padding: 1rem; display: flex; justify-content: space-between; }
+nav a { color: white; text-decoration: none; margin-left: 1rem; }
+.container { max-width: 1200px; margin: 2rem auto; padding: 0 1rem; }
+
+/* Таблица книг */
+.books-table { width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+.books-table th { background: #ecf0f1; padding: 12px; text-align: left; font-size: 0.85rem; text-transform: uppercase; }
+.books-table td { padding: 12px; border-bottom: 1px solid #eee; font-size: 0.9rem; }
+
+/* Карточка книги */
+.book-card { background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 10px 20px rgba(0,0,0,0.05); }
+.section-title { border-bottom: 2px solid #3498db; padding-bottom: 0.5rem; margin-top: 2rem; }
+.rating-badge { font-weight: bold; font-size: 1.2rem; color: #2ecc71; }
+
+/* Индикаторы синхронизации */
+.htmx-indicator { display: none; }
+.htmx-request .htmx-indicator { display: inline; }
+.sync-report { padding: 1rem; border-radius: 5px; margin-bottom: 1rem; }
+.error-list { color: #c0392b; font-size: 0.85rem; }
+
+/* Основные сбросы */
+* { box-sizing: border-box; }
+body { 
+    margin: 0; 
+    padding: 0; 
+    background-color: #f4f7f6; 
+    color: #333; 
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* Контейнеры */
+.main-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem 1rem;
+    min-height: calc(100vh - 160px); /* Чтобы футер был внизу */
+}
+
+/* Навигация */
+.navbar {
+    background-color: #2c3e50;
+    color: white;
+    padding: 1rem 0;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+.nav-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 1rem;
+}
+.nav-brand a {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: white;
+    text-decoration: none;
+}
+.nav-links {
+    list-style: none;
+    display: flex;
+    margin: 0;
+    padding: 0;
+}
+.nav-links li {
+    margin-left: 1.5rem;
+}
+.nav-links a {
+    color: #bdc3c7;
+    text-decoration: none;
+    font-weight: 500;
+    transition: color 0.3s;
+}
+.nav-links a:hover {
+    color: white;
+}
+.disabled-link {
+    opacity: 0.4;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+/* Подвал */
+.footer {
+    background-color: #ecf0f1;
+    text-align: center;
+    padding: 2rem 0;
+    margin-top: 2rem;
+    border-top: 1px solid #ddd;
+    color: #7f8c8d;
+}
+
+/* Общие элементы для страниц */
+.btn {
+    display: inline-block;
+    padding: 0.5rem 1.5rem;
+    border-radius: 5px;
+    background: #3498db;
+    color: white;
+    text-decoration: none;
+    border: none;
+    cursor: pointer;
+    font-weight: 600;
+}
+.btn:hover { background: #2980b9; }
+```
+
+---
+
+### FILE: `src\web\templates\layout.html`
+```html
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Obsidian Analytics</title>
+    
+    <!-- Подключаем наш кастомный CSS из статики -->
+    <link rel="stylesheet" href="{{ url_for('static', path='css/style.css') }}">
+    
+    <!-- Подключаем HTMX (для динамической синхронизации без перезагрузки) -->
+    <script src="https://unpkg.com/htmx.org@2.0.0"></script>
+    
+    <!-- Иконки (опционально, используем стандартные эмодзи для простоты) -->
+</head>
+<body>
+
+    <!-- Навигационная панель -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-brand">
+                <a href="/">🏠 Obsidian Dash</a>
+            </div>
+            <ul class="nav-links">
+                <li><a href="/books">📚 Книги</a></li>
+                <li><a href="/games" class="disabled-link">🎮 Игры</a></li>
+                <li><a href="/movies" class="disabled-link">🎬 Кино</a></li>
+                <li><a href="/daily" class="disabled-link">📅 Дневник</a></li>
+                <li><a href="/weekly" class="disabled-link">📊 Итоги</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- Основной контент страницы -->
+    <main class="main-container">
+        <!-- Сюда Jinja2 будет вставлять содержимое из других шаблонов (books.html и т.д.) -->
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Подвал сайта -->
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2024 Obsidian Analytics Web App</p>
+            <p style="font-size: 0.8rem; color: #95a5a6;">Локальный проект для анализа базы знаний</p>
+        </div>
+    </footer>
+
+    <!-- Глобальные настройки HTMX (индикатор загрузки и т.д.) -->
+    <script>
+        document.body.addEventListener('htmx:beforeSend', function(evt) {
+            console.log('HTMX: Отправка запроса...');
+        });
+        document.body.addEventListener('htmx:afterRequest', function(evt) {
+            console.log('HTMX: Запрос завершен.');
+        });
+    </script>
+</body>
+</html>
+```
+
+---
+
+### FILE: `src\web\templates\components\sync_report.html`
+```html
+<div style="padding: 1rem; margin-bottom: 2rem; border-radius: 8px; border: 1px solid; 
+    {% if stats.errors > 0 %} background-color: #fff9db; border-color: #fab005; color: #856404; 
+    {% else %} background-color: #ebfbee; border-color: #40c057; color: #2b8a3e; {% endif %}">
+    
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+            <strong>Синхронизация завершена!</strong><br>
+            Обработано файлов: {{ stats.total }} | 
+            Обновлено в базе: {{ stats.updated }} | 
+            Ошибок: {{ stats.errors }}
+        </div>
+        <button onclick="this.parentElement.parentElement.remove()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: inherit;">&times;</button>
+    </div>
+
+    {% if stats.errors > 0 %}
+    <div style="margin-top: 1rem; font-size: 0.85rem;">
+        <strong>Список проблемных файлов (кликните, чтобы открыть в Obsidian):</strong>
+        <ul style="margin-top: 0.5rem; padding-left: 1.2rem;">
+            {% for error in stats.error_details %}
+            <li style="margin-bottom: 5px;">
+                <a href="obsidian://open?vault=Knowledge_Base&file={{ error.file | urlencode }}" 
+                   style="color: #e67e22; font-weight: bold; text-decoration: underline;">
+                    {{ error.file }}
+                </a>: {{ error.error }}
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+</div>
+```
+
+---
+
+### FILE: `src\web\templates\pages\books.html`
+```html
+{% extends "layout.html" %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+    <h1 style="margin: 0; font-size: 2.5rem;">📚 Моя Библиотека</h1>
+    
+    <div id="sync-section">
+        <button 
+            class="btn"
+            hx-post="/books/sync" 
+            hx-target="#sync-report" 
+            hx-indicator="#spinner"
+        >
+            Синхронизировать Книги
+        </button>
+        <span id="spinner" class="htmx-indicator" style="margin-left: 10px;">⏳ Обработка...</span>
+    </div>
+</div>
+
+<!-- Место для отчета об ошибках/успехе -->
+<div id="sync-report"></div>
+
+<table class="books-table">
+    <thead>
+        <tr>
+            <th>Рейтинг</th>
+            <th>Название</th>
+            <th>Автор</th>
+            <th>Статус</th>
+            <th>Жанры</th>
+            <th style="text-align: right;">Страниц</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for book in books %}
+        <tr style="background-color: {{ book.bg_color }}; color: {{ book.text_color }};">
+            <td style="font-weight: bold;">{{ book.total_rating }}</td>
+            <td>
+                <a href="/books/{{ book.id }}" style="color: inherit; font-weight: 600;">{{ book.title }}</a>
+            </td>
+            <td>{{ book.author }}</td>
+            <td>{{ book.status }}</td>
+            <td>{{ book.genres }}</td>
+            <td style="text-align: right;">{{ book.total }}</td>
+            <td>
+                <a href="obsidian://open?vault=Knowledge_Base&file={{ book.file_path | urlencode }}" title="В Obsidian">📂</a>
+            </td>
+        </tr>
+        {% else %}
+        <tr>
+            <td colspan="7" style="text-align: center; padding: 3rem; color: #7f8c8d;">
+                Книг в базе данных пока нет. Нажмите «Синхронизировать».
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}
+```
+
+---
+
+### FILE: `src\web\templates\pages\book_detail.html`
+```html
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="book-card" style="background-color: white; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
+    <div style="margin-bottom: 2rem;">
+        <a href="/books" style="color: #3498db; text-decoration: none; font-weight: bold;">&larr; Назад к списку</a>
+    </div>
+    
+    <header style="border-bottom: 1px solid #eee; padding-bottom: 1rem; margin-bottom: 2rem;">
+        <h1 style="margin: 0; font-size: 2.5rem;">{{ book.title }}</h1>
+        <p style="color: #7f8c8d; font-size: 1.2rem; margin: 0.5rem 0 0 0;">
+            {{ book.author }} {% if book.year %}({{ book.year }}){% endif %}
+        </p>
+    </header>
+
+    <!-- Сетка параметров -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-bottom: 2rem; background: #f8f9fa; padding: 1.5rem; border-radius: 8px;">
+        <div><strong>Рейтинг:</strong> <span style="color: #2ecc71; font-size: 1.2rem; font-weight: bold;">{{ book.total_rating }}/100</span></div>
+        <div><strong>Статус:</strong> {{ book.status }}</div>
+        <div><strong>Страниц:</strong> {{ book.total }}</div>
+        <div><strong>Язык:</strong> {{ book.language }}</div>
+        <div><strong>Формат:</strong> {{ book.format }}</div>
+    </div>
+
+    <!-- Разделы из текста заметки -->
+    {% if content.main_characters %}
+    <h2 class="section-title">👤 Главные герои</h2>
+    <div style="white-space: pre-wrap; margin-bottom: 2rem;">{{ content.main_characters }}</div>
+    {% endif %}
+
+    {% if content.impression %}
+    <h2 class="section-title">❤️ Моё впечатление</h2>
+    <div style="white-space: pre-wrap; line-height: 1.6; margin-bottom: 2rem;">{{ content.impression }}</div>
+    {% endif %}
+
+    {% if content.quotes %}
+    <h2 class="section-title">📝 Цитаты</h2>
+    <div style="white-space: pre-wrap; font-style: italic; background: #fffbe6; padding: 1.5rem; border-left: 5px solid #f1c40f;">
+        {{ content.quotes }}
+    </div>
+    {% endif %}
+
+    <div style="margin-top: 4rem; text-align: center;">
+        <a href="obsidian://open?vault=Knowledge_Base&file={{ book.file_path | urlencode }}" class="btn">
+            Открыть заметку в Obsidian
+        </a>
+    </div>
+</div>
+{% endblock %}
+```
+
+---
+
+### FILE: `src\web\templates\pages\index.html`
+```html
+{% extends "layout.html" %}
+
+{% block content %}
+<div style="text-align: center; margin-top: 5rem;">
+    <h1 style="font-size: 3rem; color: #2c3e50;">Добро пожаловать в Obsidian Dash</h1>
+    <p style="font-size: 1.2rem; color: #7f8c8d;">Ваша база знаний теперь под контролем аналитики.</p>
+    
+    <div style="margin-top: 3rem;">
+        <a href="/books" class="btn" style="padding: 1rem 2rem; font-size: 1.2rem;">Перейти к Книгам 📚</a>
+    </div>
+</div>
+{% endblock %}
 ```
 
 ---
