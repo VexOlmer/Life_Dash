@@ -1,0 +1,49 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="book-card" style="background-color: white; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
+    <div style="margin-bottom: 2rem;">
+        <a href="/books" style="color: #3498db; text-decoration: none; font-weight: bold;">&larr; Назад к списку</a>
+    </div>
+    
+    <header style="border-bottom: 1px solid #eee; padding-bottom: 1rem; margin-bottom: 2rem;">
+        <h1 style="margin: 0; font-size: 2.5rem;">{{ book.title }}</h1>
+        <p style="color: #7f8c8d; font-size: 1.2rem; margin: 0.5rem 0 0 0;">
+            {{ book.author }} {% if book.year %}({{ book.year }}){% endif %}
+        </p>
+    </header>
+
+    <!-- Сетка параметров -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-bottom: 2rem; background: #f8f9fa; padding: 1.5rem; border-radius: 8px;">
+        <div><strong>Рейтинг:</strong> <span style="color: #2ecc71; font-size: 1.2rem; font-weight: bold;">{{ book.total_rating }}/100</span></div>
+        <div><strong>Статус:</strong> {{ book.status }}</div>
+        <div><strong>Страниц:</strong> {{ book.total }}</div>
+        <div><strong>Язык:</strong> {{ book.language }}</div>
+        <div><strong>Формат:</strong> {{ book.format }}</div>
+    </div>
+
+    <!-- Разделы из текста заметки -->
+    {% if content.main_characters %}
+    <h2 class="section-title">👤 Главные герои</h2>
+    <div style="white-space: pre-wrap; margin-bottom: 2rem;">{{ content.main_characters }}</div>
+    {% endif %}
+
+    {% if content.impression %}
+    <h2 class="section-title">❤️ Моё впечатление</h2>
+    <div style="white-space: pre-wrap; line-height: 1.6; margin-bottom: 2rem;">{{ content.impression }}</div>
+    {% endif %}
+
+    {% if content.quotes %}
+    <h2 class="section-title">📝 Цитаты</h2>
+    <div style="white-space: pre-wrap; font-style: italic; background: #fffbe6; padding: 1.5rem; border-left: 5px solid #f1c40f;">
+        {{ content.quotes }}
+    </div>
+    {% endif %}
+
+    <div style="margin-top: 4rem; text-align: center;">
+        <a href="obsidian://open?vault=Knowledge_Base&file={{ book.file_path | urlencode }}" class="btn">
+            Открыть заметку в Obsidian
+        </a>
+    </div>
+</div>
+{% endblock %}

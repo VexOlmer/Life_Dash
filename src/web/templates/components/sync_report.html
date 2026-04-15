@@ -1,0 +1,30 @@
+<div style="padding: 1rem; margin-bottom: 2rem; border-radius: 8px; border: 1px solid; 
+    {% if stats.errors > 0 %} background-color: #fff9db; border-color: #fab005; color: #856404; 
+    {% else %} background-color: #ebfbee; border-color: #40c057; color: #2b8a3e; {% endif %}">
+    
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+            <strong>Синхронизация завершена!</strong><br>
+            Обработано файлов: {{ stats.total }} | 
+            Обновлено в базе: {{ stats.updated }} | 
+            Ошибок: {{ stats.errors }}
+        </div>
+        <button onclick="this.parentElement.parentElement.remove()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: inherit;">&times;</button>
+    </div>
+
+    {% if stats.errors > 0 %}
+    <div style="margin-top: 1rem; font-size: 0.85rem;">
+        <strong>Список проблемных файлов (кликните, чтобы открыть в Obsidian):</strong>
+        <ul style="margin-top: 0.5rem; padding-left: 1.2rem;">
+            {% for error in stats.error_details %}
+            <li style="margin-bottom: 5px;">
+                <a href="obsidian://open?vault=Knowledge_Base&file={{ error.file | urlencode }}" 
+                   style="color: #e67e22; font-weight: bold; text-decoration: underline;">
+                    {{ error.file }}
+                </a>: {{ error.error }}
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+</div>

@@ -5,10 +5,13 @@ from contextlib import asynccontextmanager
 
 import uvicorn
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
 from src.core.config import settings
 from src.core.database import init_db
 from src.core.logger import logger
+from src.modules.books.router import router as books_router
+from src.web.router import router as web_router
 
 
 @asynccontextmanager
@@ -27,7 +30,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("Запуск приложения Obsidian Analytics...")
     init_db()
     
-    yield  # Здесь приложение начинает принимать запросы
+    yield  # Принятие запросов приложением
     
     # --- Действия при остановке (Shutdown) ---
     logger.info("Остановка приложения...")
@@ -40,6 +43,10 @@ app = FastAPI(
     debug=settings.DEBUG,
     lifespan=lifespan,
 )
+app.mount("/static", StaticFiles(directory="src/web/static"), name="static")
+
+app.include_router(web_router)    # Главная страница (/)
+app.include_router(books_router)  # Модуль книг (/books)
 
 
 @app.get("/health")

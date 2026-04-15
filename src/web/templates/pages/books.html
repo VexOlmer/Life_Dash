@@ -1,0 +1,59 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+    <h1 style="margin: 0; font-size: 2.5rem;">📚 Моя Библиотека</h1>
+    
+    <div id="sync-section">
+        <button 
+            class="btn"
+            hx-post="/books/sync" 
+            hx-target="#sync-report" 
+            hx-indicator="#spinner"
+        >
+            Синхронизировать Книги
+        </button>
+        <span id="spinner" class="htmx-indicator" style="margin-left: 10px;">⏳ Обработка...</span>
+    </div>
+</div>
+
+<!-- Место для отчета об ошибках/успехе -->
+<div id="sync-report"></div>
+
+<table class="books-table">
+    <thead>
+        <tr>
+            <th>Рейтинг</th>
+            <th>Название</th>
+            <th>Автор</th>
+            <th>Статус</th>
+            <th>Жанры</th>
+            <th style="text-align: right;">Страниц</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for book in books %}
+        <tr style="background-color: {{ book.bg_color }}; color: {{ book.text_color }};">
+            <td style="font-weight: bold;">{{ book.total_rating }}</td>
+            <td>
+                <a href="/books/{{ book.id }}" style="color: inherit; font-weight: 600;">{{ book.title }}</a>
+            </td>
+            <td>{{ book.author }}</td>
+            <td>{{ book.status }}</td>
+            <td>{{ book.genres }}</td>
+            <td style="text-align: right;">{{ book.total }}</td>
+            <td>
+                <a href="obsidian://open?vault=Knowledge_Base&file={{ book.file_path | urlencode }}" title="В Obsidian">📂</a>
+            </td>
+        </tr>
+        {% else %}
+        <tr>
+            <td colspan="7" style="text-align: center; padding: 3rem; color: #7f8c8d;">
+                Книг в базе данных пока нет. Нажмите «Синхронизировать».
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}
