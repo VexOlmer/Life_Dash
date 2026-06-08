@@ -1,5 +1,6 @@
 """Модуль управления базой данных."""
 
+import logging
 from collections.abc import Generator
 from pathlib import Path
 
@@ -8,7 +9,7 @@ from sqlmodel import Session, SQLModel, create_engine
 from src.core.config import settings
 from src.core.logger import logger
 
-# Создаем движок (echo=True в режиме дебага выводит SQL-запросы в консоль)
+logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
 engine = create_engine(settings.DATABASE_URL, echo=settings.DEBUG)
 
 
@@ -20,12 +21,11 @@ def init_db() -> None:
     """
     
     try:
-        # Убеждаемся, что папка для БД существует
         db_path = Path("data")
         db_path.mkdir(exist_ok=True)
 
         SQLModel.metadata.create_all(engine)
-        logger.info("База данных успешно инициализирована.")
+        logger.success("База данных успешно инициализирована.")
     except Exception as e:
         logger.error(f"Критическая ошибка при инициализации БД: {e}")
         raise

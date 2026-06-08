@@ -1,5 +1,7 @@
 """Роутер для основных страниц сайта."""
 
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -10,9 +12,10 @@ from src.modules.books.models import Book
 
 router = APIRouter(tags=["Web"])
 templates = Jinja2Templates(directory="src/web/templates")
+SessionDep = Annotated[Session, Depends(get_session)]
 
 @router.get("/", response_class=HTMLResponse)
-async def index(request: Request, session: Session = Depends(get_session)):
+async def index(request: Request, session: Session = SessionDep) -> HTMLResponse:
     """Подсчитывание статистики книг."""
     
     total_books = session.exec(select(func.count(Book.id))).one()

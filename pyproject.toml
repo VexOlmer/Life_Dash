@@ -62,10 +62,12 @@ target-version = "py312"
 # ANN - проверка аннотаций типов
 select = ["E", "F", "I", "UP", "B", "D", "N", "ANN"]
 
-# Игнорируем спорные правила форматирования docstring
+# Убираем неудобные правила форматирования docstring
 # D202 - пустая строка после docstring
 # D208 - отступы в docstring
 # D212 - многострочный docstring начинается с первой строки
+# D214 - единый стиль отступов (видимо конфликтует с D202)
+# E501 - максимальная длина строки (игронирурется очень редко, когда строка 81-85 символов)
 ignore = ["D202", "D208", "D212", "D214", "E501"]
 
 [tool.ruff.lint.pydocstyle]
@@ -88,3 +90,14 @@ addopts = "--cov=src --cov-report=term-missing"
 python_version = "3.12"
 strict = true
 ignore_missing_imports = true
+
+# --- Команды запуска ---
+
+# poetry run ruff check --fix .
+# poetry run ruff format .
+
+# poetry run mypy src/
+
+# poetry run pytest
+
+# poetry run ruff check --fix . && poetry run ruff format . && poetry run mypy src/ && poetry run pytest

@@ -1,5 +1,7 @@
 """Модели данных для модуля книг."""
 
+import re
+
 from sqlmodel import Field, SQLModel
 
 
@@ -17,7 +19,7 @@ class Book(SQLModel, table=True):
     total: int = 0
     isbn: str | None = None
     status: str = "finished"
-    genres: str = ""
+    genres: str = ""        # Здесь храним полную строку: "fantasy (dark, epic), drama"
     series: str | None = None
     format: str | None = None
     language: str | None = None
@@ -49,3 +51,38 @@ class Book(SQLModel, table=True):
     file_path: str = Field(unique=True, index=True)
     last_modified: float
     created_at: str | None = None  # Из поля created в YAML
+    
+    @property
+    def primary_genres_list(self) -> list:
+        """Возвращает список только основных жанров: ['fantasy', 'drama']."""
+        
+        if not self.genres:
+            return []
+        
+        # 1. Убираем всё в скобках
+        clean = re.sub(r'\s*\([^)]*\)', '', self.genres)
+        # 2. Разбиваем по запятой и чистим пробелы
+        return [g.strip() for g in clean.split(',') if g.strip()]
+
+    @property
+    def detailed_genres_list(self) -> list:
+        """Возвращает список словарей: [{'name': 'fantasy', 'sub': 'dark, epic'}, ...]."""
+        
+        if not self.genres:
+            return []
+        
+        results = []
+        # Разделяем по запятым, которые НЕ находятся внутри скобок
+        blocks = re.split(r',\s*(?![^()]*\))', self.genres)
+        
+        for block in blocks:
+            # Извлекаем основной жанр
+            name = re.sub(r'\s*\([^)]*\)', '', block).strip()
+            # Извлекаем то, что в скобках
+            sub = ""
+            match = re.search(r'\((.*?)\)', block)
+            if match:
+                sub = match.group(1).strip()
+            
+            results.append({"name": name, "sub": sub})
+        return results

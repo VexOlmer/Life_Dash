@@ -21,12 +21,14 @@
         </div>
 
         {% set next_order = 'asc' if current_order == 'desc' else 'desc' %}
-        <a href="?sort={{ current_sort }}&order={{ next_order }}" class="order-toggle">
+        <!-- Кнопка направления теперь имеет класс order-toggle для рамки -->
+        <a href="?sort={{ current_sort }}&order={{ next_order }}" class="order-toggle" title="Изменить направление">
             {{ '↓' if current_order == 'desc' else '↑' }}
         </a>
 
-        <button class="btn-primary btn-large" hx-post="/books/sync" hx-target="#sync-report">
-            <span>🔄</span> Синхронизировать данные
+        <!-- Убрали btn-large, теперь кнопка стандартного размера -->
+        <button class="btn-primary" hx-post="/books/sync" hx-target="#sync-report">
+            <span>🔄</span> Синхронизировать
         </button>
     </div>
 </div>
@@ -37,7 +39,8 @@
     <div class="list-header">
         <span>Рейт.</span>
         <span>Название и автор</span>
-        <span style="text-align: center;">Аналитика по параметрам</span>
+        <span style="text-align: center;">Аналитика</span>
+        <span>Жанры</span>
         <span style="text-align: right;">Стр.</span>
         <span style="text-align: center;">Статус</span>
         <span></span>
@@ -53,7 +56,6 @@
             <span class="row-author">{{ book.author }}</span>
         </div>
 
-        <!-- УЛУЧШЕННАЯ МАТРИЦА -->
         <div class="rating-matrix">
             {% set ratings_data = [
                 ('Герои', book.rating_characters), ('Сюжет', book.rating_plot), 
@@ -70,14 +72,23 @@
             {% endfor %}
         </div>
 
+        <div class="row-genres">
+            {% for genre in book.primary_genres_list %}
+            <div class="list-genre-tag">
+                {{ genre }}
+            </div>
+            {% endfor %}
+        </div>
+
         <div class="row-meta" style="text-align: right;"><strong>{{ book.total }}</strong></div>
         <div style="display: flex; justify-content: center;"><span class="status-pill dynamic-pill">{{ book.status }}</span></div>
 
         <div style="display: flex; justify-content: flex-end;">
             <object>
                 <a href="obsidian://open?vault=Knowledge_Base&file={{ book.file_path | urlencode }}" 
-                   class="row-anchor obsidian-anchor" style="text-decoration: none;">
-                   <span class="obsidian-icon">🔗</span>
+                   class="row-anchor obsidian-anchor" title="Открыть в Obsidian">
+                   <!-- Вместо эмодзи используем стилизованный символ -->
+                   <span class="obsidian-icon">↗</span>
                 </a>
             </object>
         </div>

@@ -1,7 +1,6 @@
 """Сервис для динамического извлечения контента из заметок Obsidian."""
 
 import re
-from pathlib import Path
 
 from src.core.config import settings
 

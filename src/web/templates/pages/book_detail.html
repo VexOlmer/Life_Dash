@@ -6,18 +6,33 @@
         ← Вернуться в библиотеку
     </a>
 
-    <div class="book-card" style="padding: 0; overflow: hidden; border-radius: 24px;">
+    <div class="book-card" style="padding: 0; overflow: hidden; border-radius: 24px; background: white;">
         <!-- Hero Section -->
         <div style="background-color: {{ book.bg_color }}; color: {{ book.text_color }}; padding: 4rem 3rem;">
             <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                <div>
-                    <span style="text-transform: uppercase; letter-spacing: 2px; font-size: 0.8rem; opacity: 0.8;">{{ book.genres }}</span>
-                    <h1 style="font-size: 3.5rem; margin: 0.5rem 0; letter-spacing: -2px; line-height: 1;">{{ book.title }}</h1>
-                    <p style="font-size: 1.5rem; opacity: 0.9;">{{ book.author }}, {{ book.year }}</p>
+                <div style="flex: 1;">
+                    <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 1.5rem;">
+                        {% for genre in book.detailed_genres_list %}
+                            <div style="background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.2); padding: 4px 12px; border-radius: 8px; display: flex; align-items: center; gap: 8px; backdrop-filter: blur(4px);">
+                                <span style="font-weight: 800; text-transform: uppercase; font-size: 0.7rem; letter-spacing: 0.5px;">
+                                    {{ genre.name }}
+                                </span>
+                                {% if genre.sub %}
+                                <span style="opacity: 0.8; font-size: 0.75rem; border-left: 1px solid rgba(255,255,255,0.3); padding-left: 8px; font-style: italic;">
+                                    {{ genre.sub }}
+                                </span>
+                                {% endif %}
+                            </div>
+                        {% endfor %}
+                    </div>
+
+                    <h1 style="font-size: 3.5rem; margin: 0; letter-spacing: -2px; line-height: 1.1;">{{ book.title }}</h1>
+                    <p style="font-size: 1.5rem; opacity: 0.9; margin-top: 0.5rem;">{{ book.author }}, {{ book.year }}</p>
                 </div>
-                <div style="text-align: right;">
-                    <div style="font-size: 4rem; font-weight: 900;">{{ book.total_rating }}</div>
-                    <div style="text-transform: uppercase; font-size: 0.7rem; font-weight: bold; opacity: 0.7;">Общий рейтинг</div>
+                
+                <div style="text-align: right; margin-left: 2rem;">
+                    <div style="font-size: 4.5rem; font-weight: 900; line-height: 1;">{{ book.total_rating|int }}</div>
+                    <div style="text-transform: uppercase; font-size: 0.7rem; font-weight: 800; opacity: 0.7; letter-spacing: 1px;">Rating Score</div>
                 </div>
             </div>
         </div>
@@ -26,38 +41,45 @@
             <!-- Сетка характеристик -->
             <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 2rem; margin-bottom: 3rem; padding-bottom: 2rem; border-bottom: 1px solid #eee;">
                 <div>
-                    <h4 style="margin: 0; color: #a4b0be; text-transform: uppercase; font-size: 0.7rem;">Метаданные</h4>
-                    <ul style="list-style: none; padding: 0; margin: 0.5rem 0;">
-                        <li><strong>Статус:</strong> {{ book.status }}</li>
-                        <li><strong>Формат:</strong> {{ book.format }}</li>
-                        <li><strong>Язык:</strong> {{ book.language }}</li>
+                    <h4 style="margin: 0; color: #a4b0be; text-transform: uppercase; font-size: 0.75rem; font-weight: 800; letter-spacing: 1px;">Метаданные</h4>
+                    <ul style="list-style: none; padding: 0; margin: 1rem 0;">
+                        <li style="margin-bottom: 5px;"><strong>Статус:</strong> {{ book.status }}</li>
+                        <li style="margin-bottom: 5px;"><strong>Формат:</strong> {{ book.format }}</li>
+                        <li style="margin-bottom: 5px;"><strong>Язык:</strong> {{ book.language }}</li>
                     </ul>
                 </div>
                 <div>
-                    <h4 style="margin: 0; color: #a4b0be; text-transform: uppercase; font-size: 0.7rem;">Прогресс</h4>
-                    <p style="font-size: 1.1rem; margin: 0.5rem 0;">Прочитано <strong>{{ book.total }}</strong> страниц</p>
-                    <small>С {{ book.started or '?' }} по {{ book.finished or '?' }}</small>
+                    <h4 style="margin: 0; color: #a4b0be; text-transform: uppercase; font-size: 0.75rem; font-weight: 800; letter-spacing: 1px;">Объем</h4>
+                    <p style="font-size: 1.25rem; margin: 1rem 0 0.5rem 0;"><strong>{{ book.total }}</strong> страниц</p>
+                    <small style="color: var(--text-muted);">Период: {{ book.started or '?' }} — {{ book.finished or '?' }}</small>
                 </div>
             </div>
 
             <!-- Контент из Obsidian -->
             <div class="prose">
                 {% if content.impression %}
-                <h2 style="font-size: 1.8rem; letter-spacing: -1px;">❤️ Впечатление</h2>
-                <div style="font-size: 1.1rem; line-height: 1.8; color: #2d3436;">{{ content.impression }}</div>
+                <div style="margin-bottom: 3rem;">
+                    <h2 style="font-size: 2rem; letter-spacing: -1px; margin-bottom: 1rem; display: flex; align-items: center; gap: 10px;">
+                        <span>❤️</span> Моё впечатление
+                    </h2>
+                    <div style="font-size: 1.15rem; line-height: 1.8; color: #2d3436; white-space: pre-wrap;">{{ content.impression }}</div>
+                </div>
                 {% endif %}
 
                 {% if content.quotes %}
-                <h2 style="font-size: 1.8rem; letter-spacing: -1px; margin-top: 3rem;">📝 Цитаты</h2>
-                <div style="background: #f8f9fa; border-left: 4px solid var(--accent); padding: 2rem; font-style: italic; border-radius: 0 12px 12px 0;">
-                    {{ content.quotes }}
+                <div>
+                    <h2 style="font-size: 2rem; letter-spacing: -1px; margin-bottom: 1rem; display: flex; align-items: center; gap: 10px;">
+                        <span>📝</span> Цитаты
+                    </h2>
+                    <div style="background: #f8fafc; border-left: 5px solid var(--primary); padding: 2.5rem; font-style: italic; border-radius: 0 16px 16px 0; font-size: 1.1rem; line-height: 1.7; white-space: pre-wrap;">{{ content.quotes }}</div>
                 </div>
                 {% endif %}
             </div>
 
-            <div style="margin-top: 4rem; text-align: center; padding-top: 2rem; border-top: 1px solid #eee;">
-                <a href="obsidian://open?vault=Knowledge_Base&file={{ book.file_path | urlencode }}" class="btn-sync" style="text-decoration: none;">
-                    Открыть в Obsidian
+            <div style="margin-top: 5rem; text-align: center; padding-top: 2.5rem; border-top: 1px solid #eee;">
+                <a href="obsidian://open?vault=Knowledge_Base&file={{ book.file_path | urlencode }}" 
+                   class="btn-primary" style="text-decoration: none; padding: 12px 32px;">
+                    Открыть оригинал в Obsidian
                 </a>
             </div>
         </div>

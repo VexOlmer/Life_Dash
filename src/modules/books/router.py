@@ -24,7 +24,7 @@ async def list_books(
     session: SessionDep, 
     sort: str = "total_rating",
     order: str = "desc"
-):
+) -> HTMLResponse:
     """Список книг с универсальной сортировкой."""
     
     # Получаем атрибут модели динамически
@@ -55,7 +55,7 @@ async def list_books(
     return templates.TemplateResponse(
         "pages/books.html", 
         {
-            "request": request, 
+            "request": request,
             "books": books, 
             "current_sort": sort,
             "current_order": order,
@@ -65,7 +65,7 @@ async def list_books(
     )
 
 @router.post("/sync")
-async def sync_books_endpoint(request: Request, session: SessionDep): # noqa: ANN201
+async def sync_books_endpoint(request: Request, session: SessionDep) -> HTMLResponse:
     """Запускает синхронизацию книг."""
     stats = sync_books(session)
     return templates.TemplateResponse(
@@ -74,7 +74,7 @@ async def sync_books_endpoint(request: Request, session: SessionDep): # noqa: AN
     )
 
 @router.get("/{book_id}")
-async def book_detail(request: Request, book_id: int, session: SessionDep): # noqa: ANN201
+async def book_detail(request: Request, book_id: int, session: SessionDep) -> HTMLResponse:
     """Детальная страница книги."""
     book = session.get(Book, book_id)
     if not book:
