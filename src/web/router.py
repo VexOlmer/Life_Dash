@@ -15,15 +15,15 @@ templates = Jinja2Templates(directory="src/web/templates")
 SessionDep = Annotated[Session, Depends(get_session)]
 
 @router.get("/", response_class=HTMLResponse)
-async def index(request: Request, session: Session = SessionDep) -> HTMLResponse:
+async def index(request: Request, session: SessionDep) -> HTMLResponse:
     """Подсчитывание статистики книг."""
     
-    total_books = session.exec(select(func.count(Book.id))).one()
+    total_books = session.exec(select(func.count()).select_from(Book)).one()
     total_pages = session.exec(select(func.sum(Book.total))).one() or 0
     avg_rating = session.exec(select(func.avg(Book.total_rating))).one() or 0
 
-    finished_books = session.exec(select(func.count(Book.id)).where(Book.status == "finished")).one()
-    reading_books = session.exec(select(func.count(Book.id)).where(Book.status == "reading")).one()
+    finished_books = session.exec(select(func.count()).where(Book.status == "finished")).one()
+    reading_books = session.exec(select(func.count()).where(Book.status == "reading")).one()
 
     return templates.TemplateResponse(
         "pages/index.html", 

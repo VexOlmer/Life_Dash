@@ -1,6 +1,6 @@
 """Роутер для управления разделом книг."""
 
-from typing import Annotated
+from typing import Annotated, Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
@@ -31,7 +31,8 @@ async def list_books(
     column = getattr(Book, sort, Book.total_rating)
     
     # Применяем направление
-    expression = column.desc() if order == "desc" else column.asc()
+    attr = cast(Any, column) # Подсказка для mypy
+    expression = attr.desc() if order == "desc" else attr.asc()
     
     statement = select(Book).order_by(expression)
     books = session.exec(statement).all()

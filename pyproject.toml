@@ -85,19 +85,37 @@ testpaths = ["tests"]
 # Автоматический запуск coverage для папки src
 addopts = "--cov=src --cov-report=term-missing"
 
-# --- Настройки Mypy ---
 [tool.mypy]
 python_version = "3.12"
 strict = true
+explicit_package_bases = true
+mypy_path = "."
+
+# Упрощаем работу с библиотеками без типов (Loguru, python-frontmatter)
 ignore_missing_imports = true
+
+# Позволяет mypy понимать модели Pydantic и SQLModel более точно
+plugins = [
+  "pydantic.mypy"
+]
+
+# Чтобы mypy не ругался на отсутствие __init__.py в каждой папке
+namespace_packages = true
+
+# Рекомендуется для FastAPI: не ругаться на декораторы без типов
+disallow_subclassing_any = false
+disallow_untyped_decorators = false
+
+
 
 # --- Команды запуска ---
 
 # poetry run ruff check --fix .
 # poetry run ruff format .
 
-# poetry run mypy src/
+# poetry run mypy .\src\
 
 # poetry run pytest
 
-# poetry run ruff check --fix . && poetry run ruff format . && poetry run mypy src/ && poetry run pytest
+# Одновременная проверка двумя линтерами
+# poetry run ruff check . ; poetry run mypy src

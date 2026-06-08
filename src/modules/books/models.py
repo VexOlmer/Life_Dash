@@ -53,7 +53,7 @@ class Book(SQLModel, table=True):
     created_at: str | None = None  # Из поля created в YAML
     
     @property
-    def primary_genres_list(self) -> list:
+    def primary_genres_list(self) -> list[str]:
         """Возвращает список только основных жанров: ['fantasy', 'drama']."""
         
         if not self.genres:
@@ -65,7 +65,7 @@ class Book(SQLModel, table=True):
         return [g.strip() for g in clean.split(',') if g.strip()]
 
     @property
-    def detailed_genres_list(self) -> list:
+    def detailed_genres_list(self) -> list[dict[str, str]]:
         """Возвращает список словарей: [{'name': 'fantasy', 'sub': 'dark, epic'}, ...]."""
         
         if not self.genres:

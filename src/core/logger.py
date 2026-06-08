@@ -3,7 +3,7 @@
 import sys
 from pathlib import Path
 
-from loguru import logger
+from loguru import logger as logger
 
 
 def setup_logger() -> None:

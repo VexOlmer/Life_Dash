@@ -49,7 +49,7 @@ Life_Dash/
 
 ### FILE: `cli.py`
 ```python
-
+"""Модуль запуска проекта через консоль."""
 ```
 
 ---
@@ -86,7 +86,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         Управляет жизненным циклом приложения.
 
         Выполняет инициализацию базы данных при запуске и логирует
-        события старта и остановки.
+            события старта и остановки.
 
         Args:
             app: Экземпляр приложения FastAPI.
@@ -222,14 +222,14 @@ class BaseRepository(Generic[T]):
 
 ### FILE: `src\common\utils.py`
 ```python
-
+"""Модуль различных доп функций."""
 ```
 
 ---
 
 ### FILE: `src\common\validators.py`
 ```python
-
+"""Модуль проверочных функций."""
 ```
 
 ---
@@ -356,7 +356,7 @@ class ValidationError(Exception):
 import sys
 from pathlib import Path
 
-from loguru import logger
+from loguru import logger as logger
 
 
 def setup_logger() -> None:
@@ -461,18 +461,19 @@ class Book(SQLModel, table=True):
     created_at: str | None = None  # Из поля created в YAML
     
     @property
-    def primary_genres_list(self) -> list:
+    def primary_genres_list(self) -> list[str]:
         """Возвращает список только основных жанров: ['fantasy', 'drama']."""
         
         if not self.genres:
             return []
+        
         # 1. Убираем всё в скобках
         clean = re.sub(r'\s*\([^)]*\)', '', self.genres)
         # 2. Разбиваем по запятой и чистим пробелы
         return [g.strip() for g in clean.split(',') if g.strip()]
 
     @property
-    def detailed_genres_list(self) -> list:
+    def detailed_genres_list(self) -> list[dict[str, str]]:
         """Возвращает список словарей: [{'name': 'fantasy', 'sub': 'dark, epic'}, ...]."""
         
         if not self.genres:
@@ -522,7 +523,7 @@ class BookRepository(BaseRepository[Book]):
 ```python
 """Роутер для управления разделом книг."""
 
-from typing import Annotated
+from typing import Annotated, Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
@@ -546,14 +547,15 @@ async def list_books(
     session: SessionDep, 
     sort: str = "total_rating",
     order: str = "desc"
-):
+) -> HTMLResponse:
     """Список книг с универсальной сортировкой."""
     
     # Получаем атрибут модели динамически
     column = getattr(Book, sort, Book.total_rating)
     
     # Применяем направление
-    expression = column.desc() if order == "desc" else column.asc()
+    attr = cast(Any, column) # Подсказка для mypy
+    expression = attr.desc() if order == "desc" else attr.asc()
     
     statement = select(Book).order_by(expression)
     books = session.exec(statement).all()
@@ -577,7 +579,7 @@ async def list_books(
     return templates.TemplateResponse(
         "pages/books.html", 
         {
-            "request": request, 
+            "request": request,
             "books": books, 
             "current_sort": sort,
             "current_order": order,
@@ -587,7 +589,7 @@ async def list_books(
     )
 
 @router.post("/sync")
-async def sync_books_endpoint(request: Request, session: SessionDep): # noqa: ANN201
+async def sync_books_endpoint(request: Request, session: SessionDep) -> HTMLResponse:
     """Запускает синхронизацию книг."""
     stats = sync_books(session)
     return templates.TemplateResponse(
@@ -596,7 +598,7 @@ async def sync_books_endpoint(request: Request, session: SessionDep): # noqa: AN
     )
 
 @router.get("/{book_id}")
-async def book_detail(request: Request, book_id: int, session: SessionDep): # noqa: ANN201
+async def book_detail(request: Request, book_id: int, session: SessionDep) -> HTMLResponse:
     """Детальная страница книги."""
     book = session.get(Book, book_id)
     if not book:
@@ -622,7 +624,6 @@ async def book_detail(request: Request, book_id: int, session: SessionDep): # no
 """Сервис для динамического извлечения контента из заметок Obsidian."""
 
 import re
-from pathlib import Path
 
 from src.core.config import settings
 
@@ -689,6 +690,7 @@ class BookTransformer:
         
         logger.debug(f"Начало обработки: {file_path.name}")
         
+        # Считывание верхней части файла в YAML формате
         try:
             post = frontmatter.load(file_path)
         except Exception as e:
@@ -700,9 +702,9 @@ class BookTransformer:
 
         # 1. Проверка 10 параметров рейтинга
         rating_keys = [
-            "rating_characters", "rating_plot", "rating_size", 
-            "rating_prose", "rating_ending", "rating_depth", 
-            "rating_atmosphere", "rating_rereadability", 
+            "rating_characters", "rating_plot", "rating_size",
+            "rating_prose", "rating_ending", "rating_depth",
+            "rating_atmosphere", "rating_rereadability",
             "rating_expected_real", "rating_recommend"
         ]
         
@@ -853,6 +855,9 @@ class ScannerEngine:
 
 import time
 from pathlib import Path
+from typing import Any
+
+from sqlmodel import Session
 
 from src.core.config import settings
 from src.core.exceptions import ValidationError
@@ -863,10 +868,11 @@ from src.modules.books.transformer import BookTransformer
 from .engine import ScannerEngine
 
 
-def sync_books(session) -> dict:  # noqa: ANN001
+def sync_books(session: Session) -> dict[str, Any]:
     """
         Синхронизация заметок из базы знаний с БД.
     
+        Если файл не менялся, пропускается, иначе файл парсится и обновляется информация в БД.
         Если обработка заметки завершилась ошибкой, она не будет добавлена в БД.
     """
     
@@ -882,7 +888,7 @@ def sync_books(session) -> dict:  # noqa: ANN001
     
     logger.info(f"Сканирование завершено. Найдено файлов: {len(files)}")
     
-    stats = {"total": len(files), "updated": 0, "errors": 0, "error_details": []}
+    stats: dict[str, Any] = {"total": len(files), "updated": 0, "errors": 0, "error_details": []}
     
     for f_path, mtime in files:
         rel_path = str(f_path.relative_to(vault_path))
@@ -919,6 +925,8 @@ def sync_books(session) -> dict:  # noqa: ANN001
 ```python
 """Роутер для основных страниц сайта."""
 
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -929,17 +937,18 @@ from src.modules.books.models import Book
 
 router = APIRouter(tags=["Web"])
 templates = Jinja2Templates(directory="src/web/templates")
+SessionDep = Annotated[Session, Depends(get_session)]
 
 @router.get("/", response_class=HTMLResponse)
-async def index(request: Request, session: Session = Depends(get_session)):
+async def index(request: Request, session: SessionDep) -> HTMLResponse:
     """Подсчитывание статистики книг."""
     
-    total_books = session.exec(select(func.count(Book.id))).one()
+    total_books = session.exec(select(func.count()).select_from(Book)).one()
     total_pages = session.exec(select(func.sum(Book.total))).one() or 0
     avg_rating = session.exec(select(func.avg(Book.total_rating))).one() or 0
 
-    finished_books = session.exec(select(func.count(Book.id)).where(Book.status == "finished")).one()
-    reading_books = session.exec(select(func.count(Book.id)).where(Book.status == "reading")).one()
+    finished_books = session.exec(select(func.count()).where(Book.status == "finished")).one()
+    reading_books = session.exec(select(func.count()).where(Book.status == "reading")).one()
 
     return templates.TemplateResponse(
         "pages/index.html", 

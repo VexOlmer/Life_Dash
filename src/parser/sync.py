@@ -2,6 +2,9 @@
 
 import time
 from pathlib import Path
+from typing import Any
+
+from sqlmodel import Session
 
 from src.core.config import settings
 from src.core.exceptions import ValidationError
@@ -12,7 +15,7 @@ from src.modules.books.transformer import BookTransformer
 from .engine import ScannerEngine
 
 
-def sync_books(session) -> dict:  # noqa: ANN001
+def sync_books(session: Session) -> dict[str, Any]:
     """
         Синхронизация заметок из базы знаний с БД.
     
@@ -32,7 +35,7 @@ def sync_books(session) -> dict:  # noqa: ANN001
     
     logger.info(f"Сканирование завершено. Найдено файлов: {len(files)}")
     
-    stats = {"total": len(files), "updated": 0, "errors": 0, "error_details": []}
+    stats: dict[str, Any] = {"total": len(files), "updated": 0, "errors": 0, "error_details": []}
     
     for f_path, mtime in files:
         rel_path = str(f_path.relative_to(vault_path))
