@@ -8,7 +8,6 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from src.core.config import settings
-from src.core.database import init_db
 from src.core.logger import logger
 from src.modules.books.router import router as books_router
 from src.web.router import router as web_router
@@ -28,7 +27,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     
     # --- Действия при запуске (Startup) ---
     logger.info("Запуск приложения Obsidian Analytics...")
-    init_db()
     
     yield  # Принятие запросов приложением
     

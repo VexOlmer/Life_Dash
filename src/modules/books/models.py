@@ -1,7 +1,9 @@
 """Модели данных для модуля книг."""
 
 import re
+from typing import Any
 
+from pydantic import ConfigDict, field_validator
 from sqlmodel import Field, SQLModel
 
 
@@ -25,23 +27,23 @@ class Book(SQLModel, table=True):
     language: str
     
     # Даты начала и конца чтения
-    started: str
-    finished: str
-
+    started: str | None = None
+    finished: str | None = None
+    
     # Рейтинги (10 параметров)
-    rating_characters: float = 0.0
-    rating_plot: float = 0.0
-    rating_size: float = 0.0
-    rating_prose: float = 0.0
-    rating_ending: float = 0.0
-    rating_depth: float = 0.0
-    rating_atmosphere: float = 0.0
-    rating_rereadability: float = 0.0
-    rating_expected_real: float = 0.0
-    rating_recommend: float = 0.0
+    rating_characters: float
+    rating_plot: float
+    rating_size: float
+    rating_prose: float
+    rating_ending: float
+    rating_depth: float
+    rating_atmosphere: float
+    rating_rereadability: float
+    rating_expected_real: float
+    rating_recommend: float
     
     # Итоговый рейтинг (сумма 10 параметров)
-    total_rating: float = 0.0
+    total_rating: float = Field(default=0.0)
     
     # Цвета фона и текста
     bg_color: str = Field(default="#ffffff")
@@ -50,87 +52,154 @@ class Book(SQLModel, table=True):
     # Служебные поля
     file_path: str = Field(unique=True, index=True)
     last_modified: float
-    created_at: str | None = None  # Из поля created в YAML
+    created_at: str
     
+    model_config = ConfigDict(
+        validate_assignment=True,
+        arbitrary_types_allowed=True
+    )   
+    
+    # --- ВАЛИДАТОРЫ ---
+
+    @field_validator("bg_color", "text_color", mode="before")
+    @classmethod
+    def validate_colors(cls, v: str) -> str:
+        """Валидация корректности цветов."""
+        if not v.startswith("#") or len(v) not in [4, 7]:
+            raise ValueError("Цвет должен быть HEX-формата (#fff или #ffffff)")
+        return v
+
+    @field_validator(
+        "rating_characters", "rating_plot", "rating_size", "rating_prose",
+        "rating_ending", "rating_depth", "rating_atmosphere", 
+        "rating_rereadability", "rating_expected_real", "rating_recommend",
+        mode="before"
+    )
+    @classmethod
+    def validate_ratings(cls, v: float) -> float:
+        """Валидация рейтинговых параметров."""
+        if not (0 <= v <= 10):
+            raise ValueError("Рейтинг должен быть в диапазоне от 0 до 10")
+        return v
+
+    @field_validator("genres", mode="before")
+    @classmethod
+    def validate_genres(cls, v: str) -> str:
+        """Валидация жанров и поджанров."""
+        if not v.strip():
+            raise ValueError("Список жанров не может быть пустым")
+        
+        # Получение основных жанров минуя поджанры
+        genre_blocks = re.split(r',\s*(?![^()]*\))', v)
+        genre_blocks = [g.strip() for g in genre_blocks if g.strip()]
+
+        if not (1 <= len(genre_blocks) <= 3):
+            raise ValueError(f"Должно быть от 1 до 3 основных жанров (найдено: {len(genre_blocks)})")
+
+        for block in genre_blocks:
+            # Получение поджанров, находящихся в скобках
+            subgenres_match = re.search(r'\((.*?)\)', block)
+            if subgenres_match:
+                sub_list = [s.strip() for s in subgenres_match.group(1).split(',') if s.strip()]
+                if len(sub_list) > 2:
+                    raise ValueError(f"В жанре '{block}' не может быть более 2-х поджанров")
+        return v
+
+    # --- СВОЙСТВА ДЛЯ ЛОГОВ И ВЕБА ---
+
     @property
     def primary_genres_list(self) -> list[str]:
-        """Возвращает список только основных жанров: ['fantasy', 'drama']."""
-        
+        """Получение основных жанров."""
         if not self.genres:
             return []
         
-        # 1. Убираем всё в скобках
         clean = re.sub(r'\s*\([^)]*\)', '', self.genres)
-        # 2. Разбиваем по запятой и чистим пробелы
         return [g.strip() for g in clean.split(',') if g.strip()]
 
     @property
     def detailed_genres_list(self) -> list[dict[str, str]]:
-        """Возвращает список словарей: [{'name': 'fantasy', 'sub': 'dark, epic'}, ...]."""
-        
+        """Получение словаря жанров и его поджанров."""
         if not self.genres:
             return []
         
         results = []
-        # Разделяем по запятым, которые НЕ находятся внутри скобок
         blocks = re.split(r',\s*(?![^()]*\))', self.genres)
-        
         for block in blocks:
-            # Извлекаем основной жанр
             name = re.sub(r'\s*\([^)]*\)', '', block).strip()
-            # Извлекаем то, что в скобках
             sub = ""
             match = re.search(r'\((.*?)\)', block)
+            
             if match:
                 sub = match.group(1).strip()
-            
             results.append({"name": name, "sub": sub})
         return results
     
     @property
     def to_pretty_str(self) -> str:
             """Возвращает идеально выровненную таблицу данных книги для логов."""
-            
-            # 1. Подготовка данных (исключаем лишние колонки)
-            exclude_fields = {"id", "last_modified"}
-            data = self.model_dump()
+                
+            # 1. Получаем данные через __dict__, чтобы SQLModel ничего не скрыл
+            # Исключаем служебные и внутренние поля SQLAlchemy
+            exclude = {"id", "last_modified", "metadata", "registry"}
             
             display_rows = []
             max_key_width = 0
             max_val_width = 0
 
-            for key, value in data.items():
-                if key in exclude_fields:
+            # Проходимся по всем полям модели
+            for key in self.model_fields.keys():
+                if key in exclude:
                     continue
                 
+                val = getattr(self, key)
                 display_key = key.replace("_", " ").capitalize()
-                display_val = str(value) if value is not None else "-"
+                display_val = str(val) if val is not None else "-"
                 
                 display_rows.append((display_key, display_val))
-                
-                # Измеряем максимальную ширину для каждого столбца
                 max_key_width = max(max_key_width, len(display_key))
                 max_val_width = max(max_val_width, len(display_val))
 
-            # 2. Определяем общую ширину контента
-            # Заголовок тоже должен влезать
+            # 2. Расчет ширины
             title_line = f"BOOK DATA: {self.title}"
-            content_width = max(max_key_width + max_val_width + 3, len(title_line))
+            # Даем запас под длинные пути
+            content_width = max(max_key_width + max_val_width + 5, len(title_line), 60)
             
-            # 3. Собираем рамку
-            # Используем f-строки ПРАВИЛЬНО (f"...")
-            top =    f"┏{'━' * (content_width + 2)}┓"
+            # 3. Сборка рамки
+            top    = f"┏{'━' * (content_width + 2)}┓"
             header = f"┃ {title_line:<{content_width}} ┃"
-            sep =    f"┣{'━' * (content_width + 2)}┫"
+            sep    = f"┣{'━' * (content_width + 2)}┫"
             bottom = f"┗{'━' * (content_width + 2)}┛"
 
             lines = [f"\n{top}", header, sep]
 
             for k, v in display_rows:
-                # Считаем сколько пробелов нужно добавить между ключом и значением
-                # чтобы закрывающая черта ┃ всегда была на одном уровне
-                spacing = content_width - len(k) - len(v) - 1
+                # Математически точное выравнивание
+                spacing = content_width - len(k) - len(v) - 3
                 lines.append(f"┃ {k} : {v}{' ' * spacing} ┃")
 
             lines.append(bottom)
             return "\n".join(lines)
+        
+    def __init__(self, **data: Any) -> None:  # noqa: ANN401
+        """Рассчитываем общий рейтинг по 10 параметрам."""
+        
+        # 1. Список полей для расчета
+        rating_keys = [
+            "rating_characters", "rating_plot", "rating_size", 
+            "rating_prose", "rating_ending", "rating_depth", 
+            "rating_atmosphere", "rating_rereadability", 
+            "rating_expected_real", "rating_recommend"
+        ]
+        
+        # 2. Считаем сумму из входящего словаря данных
+        # Если каких-то данных нет, берем 0.0
+        total = sum(float(data.get(k, 0.0) or 0.0) for k in rating_keys)
+        
+        # 3. Записываем результат в словарь данных, который пойдет в базу
+        data["total_rating"] = total
+        
+        # 4. Вызываем инициализацию родительского класса (SQLModel)
+        super().__init__(**data)
+        
+        # 5. Принудительно обновляем атрибут после создания (для надежности)
+        self.total_rating = total

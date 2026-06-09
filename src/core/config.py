@@ -4,6 +4,7 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+Path("data").mkdir(exist_ok=True)
 
 class Settings(BaseSettings):
     """

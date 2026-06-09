@@ -4,10 +4,11 @@ import time
 from pathlib import Path
 from typing import Any
 
+from pydantic import ValidationError as PydanticValidationError
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session
 
 from src.core.config import settings
-from src.core.exceptions import ValidationError
 from src.core.logger import logger
 from src.modules.books.repository import BookRepository
 from src.modules.books.transformer import BookTransformer
@@ -39,10 +40,16 @@ def sync_books(session: Session) -> dict[str, Any]:
     
     for f_path, mtime in files:
         rel_path = str(f_path.relative_to(vault_path))
-        
-        db_item = repo.get_by_path(rel_path)
-        if db_item and db_item.last_modified >= mtime:
-            logger.debug(f"Пропуск (не менялся): {rel_path}")
+    
+        # 1. Попытка поиска (может упасть, если прошлая итерация не сделала rollback)
+        try:
+            db_item = repo.get_by_path(rel_path)
+            if db_item and db_item.last_modified >= mtime:
+                logger.debug(f"Пропуск (не менялся): {rel_path}")
+                continue
+        except Exception as e:
+            logger.error(f"Ошибка доступа к БД при поиске {rel_path}: {e}")
+            session.rollback() # Чиним сессию
             continue
             
         try:
@@ -55,13 +62,24 @@ def sync_books(session: Session) -> dict[str, Any]:
             stats["updated"] += 1
             logger.success(f"Обновлено: {book_obj.title}")
             
-        except ValidationError as e:
-            logger.warning(f"Ошибка валидации в {rel_path}: {e}")
+        except PydanticValidationError as e:
+            # Ошибки структуры (пропущенные поля, типы данных)
+            error_msg = " | ".join([f"{err['loc'][0]}: {err['msg']}" for err in e.errors()])
+            logger.warning(f"Ошибка валидации в {rel_path}: {error_msg}")
             stats["errors"] += 1
-            stats["error_details"].append({"file": rel_path, "error": str(e)})
+            stats["error_details"].append({"file": rel_path, "error": error_msg})
+            
+        except IntegrityError as e:
+            # Ошибки базы данных (NOT NULL, Unique и т.д.)
+            session.rollback()
+            error_msg = f"Ошибка базы данных (проверьте обязательные поля): {e.orig}"
+            logger.error(f"Ошибка записи в БД {rel_path}: {error_msg}")
+            stats["errors"] += 1
+            stats["error_details"].append({"file": rel_path, "error": "Ошибка структуры БД (пропущены поля?)"}) 
             
         except Exception as e:
-            logger.error(f"Ошибка в {rel_path}: {e}")
+            session.rollback()
+            logger.error(f"Непредвиденная ошибка в {rel_path}: {e}")
             stats["errors"] += 1
 
     duration = round(time.time() - start_time, 2)
