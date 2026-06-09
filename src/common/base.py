@@ -29,6 +29,9 @@ class BaseRepository(Generic[T]):
 
             Args:
                 relative_path: Относительный путь от корня Vault.
+            
+            Returns:
+                T | None
         """
         
         # Мы предполагаем, что у всех моделей будет поле file_path
@@ -43,6 +46,9 @@ class BaseRepository(Generic[T]):
 
             Args:
                 instance: Экземпляр модели.
+            
+            Returns:
+                None
         """
         
         existing = self.get_by_path(instance.file_path)  # type: ignore
@@ -64,9 +70,22 @@ class BaseRepository(Generic[T]):
 
             Args:
                 relative_path: Относительный путь к файлу.
+            
+            Returns:
+                None
         """
         
         instance = self.get_by_path(relative_path)
         if instance:
             self.session.delete(instance)
             self.session.commit()
+            
+    def get_all_paths(self) -> list[str]:
+        """
+            Возвращает список всех путей файлов, зарегистрированных в БД.
+            
+            Returns:
+                list[str] - Список всех путей файлов
+        """
+        statement = select(self.model_type.file_path)
+        return self.session.exec(statement).all()

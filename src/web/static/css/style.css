@@ -80,10 +80,36 @@ body {
 .books-list { display: flex; flex-direction: column; gap: 10px; }
 .list-header, .book-row {
     display: grid;
-    grid-template-columns: 60px 1.5fr 550px 1fr 80px 120px 60px;
-    align-items: center; gap: 20px;
+    /* 
+       Объяснение колонок:
+       60px          - Рейтинг
+       minmax(0, 1fr)- Название (гибкое, но не распирает)
+       550px         - Аналитика (фиксировано)
+       minmax(0, 0.8fr)- Жанры (гибкое)
+       60px          - Год
+       60px          - Стр.
+       120px         - Статус
+       50px          - Кнопка
+    */
+    grid-template-columns: 60px minmax(0, 1fr) 550px minmax(0, 0.8fr) 60px 60px 120px 50px;
+    align-items: center; 
+    gap: 20px;
 }
 .list-header { padding: 0 24px; margin-bottom: 10px; color: var(--text-muted); font-size: 0.7rem; font-weight: 800; text-transform: uppercase; }
+
+/* Защита от "ступенек": если текст слишком длинный, он превратится в многоточие */
+.row-title, .row-author {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block;
+}
+
+.row-title-block {
+    min-width: 0; /* Важно для работы text-overflow внутри грида */
+    display: flex;
+    flex-direction: column;
+}
 
 .book-row {
     background: white; border-radius: 20px; padding: 12px 24px;

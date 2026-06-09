@@ -23,6 +23,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
         Args:
             app: Экземпляр приложения FastAPI.
+        
+        Returns:
+            AsyncGenerator[None, None]: Жизненный цикл сайта.
     """
     
     # --- Действия при запуске (Startup) ---
@@ -53,7 +56,7 @@ async def health_check() -> dict[str, str | bool]:
         Проверка доступности API и базы знаний.
 
         Returns:
-            dict: Статус приложения и доступность Vault.
+            dict[str, str | bool]: Статус приложения и доступность Vault.
     """
     
     return {

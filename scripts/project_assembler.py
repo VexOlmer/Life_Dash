@@ -26,7 +26,7 @@ def assemble_project_code(output_filename: str = "project_snapshot.txt") -> None
     excluded_dirs = {
         '.git', '__pycache__', '.venv', 'venv', 'env', 
         'data', 'logs', 'node_modules', '.idea', '.vscode', 'tests',
-        '.ruff_cache', '.mypy_cache'
+        '.ruff_cache', '.mypy_cache', 'migrations', 'scripts'
     }
     # Исключения расширения папок
     excluded_extensions = {
@@ -37,7 +37,7 @@ def assemble_project_code(output_filename: str = "project_snapshot.txt") -> None
     excluded_files = {
         output_filename, '.env', 'package-lock.json', 'poetry.lock', '.gitignore',
         'LICENSE', 'README.md', 'pyproject.toml',
-        'mass_update_daily_notes.py', 'project_assembler.py'
+        'mass_update_daily_notes.py', 'project_assembler.py', 'alembic.ini', 'project_snapshot.txt'
     }
 
 

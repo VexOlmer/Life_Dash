@@ -12,6 +12,7 @@ from src.core.config import settings
 from src.core.logger import logger
 from src.modules.books.repository import BookRepository
 from src.modules.books.transformer import BookTransformer
+from src.web.router import stats_cache
 
 from .engine import ScannerEngine
 
@@ -42,7 +43,25 @@ def sync_books(session: Session) -> dict[str, Any]:
     
     logger.info(f"Сканирование завершено. Найдено файлов: {len(files)}")
     
-    stats: dict[str, Any] = {"total": len(files), "updated": 0, "errors": 0, "error_details": []}
+    # --- Сверка путей к файлам в БД с реальными файлами в базе знаний ---
+    db_paths = set(repo.get_all_paths())
+    current_files_rel = {str(f[0].relative_to(vault_path)) for f in files}
+    
+    deleted_count = 0
+    paths_to_delete = db_paths - current_files_rel
+    logger.info(f"Кол-во файлов в БД, которых нет в системе - {len(paths_to_delete)}")
+    for path in paths_to_delete:
+        repo.delete_by_path(path)
+        logger.info(f"Удалена запись (файл не найден): {path}")
+        deleted_count += 1
+    
+    stats: dict[str, Any] = {
+        "total": len(files),
+        "updated": 0,
+        "errors": 0,
+        "deleted": deleted_count,
+        "error_details": []
+    }
     
     for f_path, mtime in files:
         rel_path = str(f_path.relative_to(vault_path))
@@ -87,6 +106,9 @@ def sync_books(session: Session) -> dict[str, Any]:
             session.rollback()
             logger.error(f"Непредвиденная ошибка в {rel_path}: {e}")
             stats["errors"] += 1
+
+    # Сбрасываем кэш статистики после успешной синхронизации
+    stats_cache.clear()
 
     duration = round(time.time() - start_time, 2)
     logger.info(f"Синхронизация окончена за {duration}с. Обновлено: {stats['updated']}, Ошибок: {stats['errors']}")

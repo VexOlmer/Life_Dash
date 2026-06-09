@@ -5,8 +5,9 @@
     <div style="display: flex; justify-content: space-between; align-items: center;">
         <div>
             <strong>Синхронизация завершена!</strong><br>
-            Обработано файлов: {{ stats.total }} | 
-            Обновлено в базе: {{ stats.updated }} | 
+            Найдено: {{ stats.total }} | 
+            Обновлено: {{ stats.updated }} | 
+            Удалено (отсутствующих): {{ stats.deleted }} |
             Ошибок: {{ stats.errors }}
         </div>
         <button onclick="this.parentElement.parentElement.remove()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: inherit;">&times;</button>

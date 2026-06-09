@@ -3,13 +3,10 @@
 ## Project Architecture
 ```text
 Life_Dash/
-├── scripts
-│   └── maintenance.py
 ├── src
 │   ├── common
 │   │   ├── base.py
-│   │   ├── utils.py
-│   │   └── validators.py
+│   │   └── utils.py
 │   ├── core
 │   │   ├── config.py
 │   │   ├── database.py
@@ -54,14 +51,6 @@ Life_Dash/
 
 ---
 
-### FILE: `scripts\maintenance.py`
-```python
-"""Очистка БД."""
-
-```
-
----
-
 ### FILE: `src\main.py`
 ```python
 """Главный модуль приложения Obsidian Analytics."""
@@ -74,7 +63,6 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from src.core.config import settings
-from src.core.database import init_db
 from src.core.logger import logger
 from src.modules.books.router import router as books_router
 from src.web.router import router as web_router
@@ -90,11 +78,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
         Args:
             app: Экземпляр приложения FastAPI.
+        
+        Returns:
+            AsyncGenerator[None, None]: Жизненный цикл сайта.
     """
     
     # --- Действия при запуске (Startup) ---
     logger.info("Запуск приложения Obsidian Analytics...")
-    init_db()
     
     yield  # Принятие запросов приложением
     
@@ -121,7 +111,7 @@ async def health_check() -> dict[str, str | bool]:
         Проверка доступности API и базы знаний.
 
         Returns:
-            dict: Статус приложения и доступность Vault.
+            dict[str, str | bool]: Статус приложения и доступность Vault.
     """
     
     return {
@@ -175,6 +165,9 @@ class BaseRepository(Generic[T]):
 
             Args:
                 relative_path: Относительный путь от корня Vault.
+            
+            Returns:
+                T | None
         """
         
         # Мы предполагаем, что у всех моделей будет поле file_path
@@ -189,6 +182,9 @@ class BaseRepository(Generic[T]):
 
             Args:
                 instance: Экземпляр модели.
+            
+            Returns:
+                None
         """
         
         existing = self.get_by_path(instance.file_path)  # type: ignore
@@ -210,26 +206,121 @@ class BaseRepository(Generic[T]):
 
             Args:
                 relative_path: Относительный путь к файлу.
+            
+            Returns:
+                None
         """
         
         instance = self.get_by_path(relative_path)
         if instance:
             self.session.delete(instance)
             self.session.commit()
+            
+    def get_all_paths(self) -> list[str]:
+        """
+            Возвращает список всех путей файлов, зарегистрированных в БД.
+            
+            Returns:
+                list[str] - Список всех путей файлов
+        """
+        statement = select(self.model_type.file_path)
+        return self.session.exec(statement).all()
 ```
 
 ---
 
 ### FILE: `src\common\utils.py`
 ```python
-"""Модуль различных доп функций."""
-```
+"""Утилиты для преобразования данных (перевод, форматирование)."""
 
----
+TRANSLATIONS: dict[str, str] = {
+    # Статусы
+    "plan": "В планах",
+    "reading": "Читаю",
+    "finished": "Прочитано",
+    "dropped": "Брошено",
 
-### FILE: `src\common\validators.py`
-```python
-"""Модуль проверочных функций."""
+    # Форматы
+    "paper": "Бумажная книга",
+    "electronic": "Электронная книга",
+    "audio": "Аудиокнига",
+
+    # Основные жанры
+    "fantasy": "Фэнтези",
+    "sci-fi": "Научная фантастика",
+    "thriller": "Триллер",
+    "drama": "Драма",
+    "horror": "Ужасы",
+    "adventure": "Приключения",
+    "romance": "Романтика",
+    "detective": "Детектив",
+    "mystery": "Мистика",
+    "crime": "Криминал",
+    "spy-fiction": "Шпионский",
+    "non-fiction": "Документальный",
+    "historical": "Исторический",
+    "gothic": "Готика",
+    "self-help": "Саморазвитие",
+    "biography": "Биография",
+    "travel": "Путешествия",
+    "science": "Наука",
+    "philosophy": "Философия",
+    "action": "Боевик",
+    "business": "Бизнес",
+    "poetry": "Поэзия",
+    "classic": "Классика",
+    "comedy": "Комедия",
+    "animation": "Анимация",
+    "sitcom": "Ситком",
+
+    # Поджанры (универсально для всех категорий)
+    "high": "высокое",
+    "epic": "эпическое",
+    "dark": "тёмное",
+    "neutral": "нейтральное",
+    "light": "светлое",
+    "heroic": "героическое",
+    "urban": "городское",
+    "mythic": "мифологическое",
+    "hard": "сложная",
+    "space-opera": "космическая опера",
+    "cyberpunk": "киберпанк",
+    "dystopian": "антиутопия",
+    "post-apocalyptic": "постапокалиптика",
+    "time-travel": "путешествие во времени",
+    "alien-invasion": "инопланетное вторжение",
+    "military": "военная",
+    "psychological": "психологическая",
+    "conspiracy": "заговор",
+    "legal": "юридическая",
+    "social": "социальная",
+    "family": "семейная",
+    "war": "военная",
+    "supernatural": "сверхъестественное",
+    "body": "боди-хоррор",
+    "cosmic": "лавкрафтовский ужас",
+    "slasher": "слэшер",
+    
+    "rating_characters": "Герои",
+    "rating_plot": "Сюжет",
+    "rating_size": "Объем",
+    "rating_prose": "Слог",
+    "rating_ending": "Финал",
+    "rating_depth": "Глубина",
+    "rating_atmosphere": "Атмосфера",
+    "rating_rereadability": "Перечитывание",
+    "rating_expected_real": "Ожидание / Реальность",
+    "rating_recommend": "Рекомендация",
+}
+
+def translate(key: str | None) -> str:
+    """Переводит технический термин на русский. Если перевода нет, возвращает оригинал."""
+    if not key:
+        return "-"
+    
+    # Пытаемся найти ключ в словаре (приводим к нижнему регистру на случай опечаток)
+    low_key = key.lower().strip()
+    return TRANSLATIONS.get(low_key, key.capitalize())
 ```
 
 ---
@@ -242,6 +333,7 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+Path("data").mkdir(exist_ok=True)
 
 class Settings(BaseSettings):
     """
@@ -272,7 +364,7 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str = "sqlite:///./data/db.sqlite"
 
-    DEBUG: bool = True
+    DEBUG: bool = False
     HOST: str = "127.0.0.1"
     PORT: int = 8000
 
@@ -343,7 +435,7 @@ def get_session() -> Generator[Session, None, None]:
 """Кастомные исключения для проекта."""
 
 class ValidationError(Exception):
-    """Исключение, возникающее при отсутствии обязательных полей в заметке."""
+    """Исключение, возникающее при отсутствии обязательных полей в заметке или нарушении данных в них."""
     pass
 ```
 
@@ -354,6 +446,7 @@ class ValidationError(Exception):
 """Модуль настройки логирования."""
 
 import sys
+from datetime import datetime
 from pathlib import Path
 
 from loguru import logger as logger
@@ -361,43 +454,45 @@ from loguru import logger as logger
 
 def setup_logger() -> None:
     """
-        Конфигурирует Loguru для вывода в консоль и файл.
+        Конфигурирует Loguru для вывода в консоль и уникальную папку запуска.
 
-        Создает директорию logs, если она отсутствует. Настраивает ротацию
-            и уровень фильтрации логов.
+        Создает директорию logs/run_YYYY-MM-DD_HH-MM-SS/ для каждого нового запуска.
     """
     
-    log_dir = Path("logs")
-    log_dir.mkdir(exist_ok=True)
-
+    # 1. Генерируем уникальный ID запуска на основе текущего времени
+    run_id = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    
+    # 2. Формируем путь к папке этого конкретного запуска
+    base_log_dir = Path("logs")
+    current_run_dir = base_log_dir / f"run_{run_id}"
+    
+    current_run_dir.mkdir(parents=True, exist_ok=True)
     logger.remove()
 
-    # 1. Вывод в консоль (красивый и лаконичный)
+    # 3. Вывод в консоль (остается общим)
     logger.add(
         sys.stdout,
         format="<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{message}</cyan>",
         level="INFO",
     )
 
-    # 2. Общий лог (INFO и выше) — здесь будет вся история действий
+    # 4. Лог текущего запуска (INFO и выше)
     logger.add(
-        log_dir / "app.log",
-        rotation="10 MB",
-        retention="7 days",
+        current_run_dir / "main.log",
         format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {module}:{function}:{line} - {message}",
         level="DEBUG",
         encoding="utf-8",
     )
 
-    # 3. Лог ошибок (только ERROR и CRITICAL) — чтобы быстро найти проблемы
+    # 5. Лог ошибок текущего запуска (только ERROR и выше)
     logger.add(
-        log_dir / "errors.log",
-        rotation="5 MB",
-        retention="30 days",
+        current_run_dir / "errors.log",
         format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {module}:{function}:{line} - {message} {exception}",
         level="ERROR",
         encoding="utf-8",
     )
+
+    logger.info(f"Сессия логирования инициализирована: {current_run_dir}")
 
 setup_logger()
 ```
@@ -409,8 +504,12 @@ setup_logger()
 """Модели данных для модуля книг."""
 
 import re
+from typing import Any
 
+from pydantic import ConfigDict, field_validator
 from sqlmodel import Field, SQLModel
+
+from src.common.utils import translate
 
 
 class Book(SQLModel, table=True):
@@ -422,34 +521,34 @@ class Book(SQLModel, table=True):
     title: str
     title_orig: str | None = None
     author: str = "Unknown"
-    country_author: str | None = None
-    year: int | None = None
-    total: int = 0
+    country_author: str = "Unknown"
+    year: int
+    total: int
     isbn: str | None = None
     status: str = "finished"
-    genres: str = ""        # Здесь храним полную строку: "fantasy (dark, epic), drama"
+    genres: str
     series: str | None = None
-    format: str | None = None
-    language: str | None = None
+    format: str
+    language: str
     
-    # Даты (храним как строки, так как формат в шаблоне специфичный)
+    # Даты начала и конца чтения
     started: str | None = None
     finished: str | None = None
-
+    
     # Рейтинги (10 параметров)
-    rating_characters: float = 0.0
-    rating_plot: float = 0.0
-    rating_size: float = 0.0
-    rating_prose: float = 0.0
-    rating_ending: float = 0.0
-    rating_depth: float = 0.0
-    rating_atmosphere: float = 0.0
-    rating_rereadability: float = 0.0
-    rating_expected_real: float = 0.0
-    rating_recommend: float = 0.0
+    rating_characters: float
+    rating_plot: float
+    rating_size: float
+    rating_prose: float
+    rating_ending: float
+    rating_depth: float
+    rating_atmosphere: float
+    rating_rereadability: float
+    rating_expected_real: float
+    rating_recommend: float
     
     # Итоговый рейтинг (сумма 10 параметров)
-    total_rating: float = 0.0
+    total_rating: float = Field(default=0.0)
     
     # Цвета фона и текста
     bg_color: str = Field(default="#ffffff")
@@ -458,42 +557,201 @@ class Book(SQLModel, table=True):
     # Служебные поля
     file_path: str = Field(unique=True, index=True)
     last_modified: float
-    created_at: str | None = None  # Из поля created в YAML
+    created_at: str
     
+    model_config = ConfigDict(
+        validate_assignment=True,
+        arbitrary_types_allowed=True
+    )   
+    
+    # --- ВАЛИДАТОРЫ ---
+
+    @field_validator("bg_color", "text_color", mode="before")
+    @classmethod
+    def validate_colors(cls, v: str) -> str:
+        """Валидация корректности цветов."""
+        if not v.startswith("#") or len(v) not in [4, 7]:
+            raise ValueError("Цвет должен быть HEX-формата (#fff или #ffffff)")
+        return v
+
+    @field_validator(
+        "rating_characters", "rating_plot", "rating_size", "rating_prose",
+        "rating_ending", "rating_depth", "rating_atmosphere", 
+        "rating_rereadability", "rating_expected_real", "rating_recommend",
+        mode="before"
+    )
+    @classmethod
+    def validate_ratings(cls, v: float) -> float:
+        """Валидация рейтинговых параметров."""
+        if not (0 <= v <= 10):
+            raise ValueError("Рейтинг должен быть в диапазоне от 0 до 10")
+        return v
+
+    @field_validator("genres", mode="before")
+    @classmethod
+    def validate_genres(cls, v: str) -> str:
+        """Валидация жанров и поджанров."""
+        if not v.strip():
+            raise ValueError("Список жанров не может быть пустым")
+        
+        # Получение основных жанров минуя поджанры
+        genre_blocks = re.split(r',\s*(?![^()]*\))', v)
+        genre_blocks = [g.strip() for g in genre_blocks if g.strip()]
+
+        if not (1 <= len(genre_blocks) <= 3):
+            raise ValueError(f"Должно быть от 1 до 3 основных жанров (найдено: {len(genre_blocks)})")
+
+        for block in genre_blocks:
+            # Получение поджанров, находящихся в скобках
+            subgenres_match = re.search(r'\((.*?)\)', block)
+            if subgenres_match:
+                sub_list = [s.strip() for s in subgenres_match.group(1).split(',') if s.strip()]
+                if len(sub_list) > 2:
+                    raise ValueError(f"В жанре '{block}' не может быть более 2-х поджанров")
+        return v
+
+    # --- СВОЙСТВА ДЛЯ ЛОГОВ И ВЕБА ---
+
     @property
     def primary_genres_list(self) -> list[str]:
-        """Возвращает список только основных жанров: ['fantasy', 'drama']."""
-        
+        """Получение основных жанров."""
         if not self.genres:
             return []
         
-        # 1. Убираем всё в скобках
         clean = re.sub(r'\s*\([^)]*\)', '', self.genres)
-        # 2. Разбиваем по запятой и чистим пробелы
         return [g.strip() for g in clean.split(',') if g.strip()]
 
     @property
     def detailed_genres_list(self) -> list[dict[str, str]]:
-        """Возвращает список словарей: [{'name': 'fantasy', 'sub': 'dark, epic'}, ...]."""
-        
+        """Получение словаря жанров и его поджанров."""
         if not self.genres:
             return []
         
         results = []
-        # Разделяем по запятым, которые НЕ находятся внутри скобок
         blocks = re.split(r',\s*(?![^()]*\))', self.genres)
-        
         for block in blocks:
-            # Извлекаем основной жанр
             name = re.sub(r'\s*\([^)]*\)', '', block).strip()
-            # Извлекаем то, что в скобках
             sub = ""
             match = re.search(r'\((.*?)\)', block)
+            
             if match:
                 sub = match.group(1).strip()
-            
             results.append({"name": name, "sub": sub})
         return results
+    
+    @property
+    def to_pretty_str(self) -> str:
+        """Возвращает идеально выровненную таблицу данных книги для логов."""
+            
+        # 1. Получаем данные через __dict__, чтобы SQLModel ничего не скрыл
+        # Исключаем служебные и внутренние поля SQLAlchemy
+        exclude = {"id", "last_modified", "metadata", "registry"}
+        
+        display_rows = []
+        max_key_width = 0
+        max_val_width = 0
+
+        # Проходимся по всем полям модели
+        for key in self.model_fields.keys():
+            if key in exclude:
+                continue
+            
+            val = getattr(self, key)
+            display_key = key.replace("_", " ").capitalize()
+            display_val = str(val) if val is not None else "-"
+            
+            display_rows.append((display_key, display_val))
+            max_key_width = max(max_key_width, len(display_key))
+            max_val_width = max(max_val_width, len(display_val))
+
+        # 2. Расчет ширины
+        title_line = f"BOOK DATA: {self.title}"
+        # Даем запас под длинные пути
+        content_width = max(max_key_width + max_val_width + 5, len(title_line), 60)
+        
+        # 3. Сборка рамки
+        top    = f"┏{'━' * (content_width + 2)}┓"
+        header = f"┃ {title_line:<{content_width}} ┃"
+        sep    = f"┣{'━' * (content_width + 2)}┫"
+        bottom = f"┗{'━' * (content_width + 2)}┛"
+
+        lines = [f"\n{top}", header, sep]
+
+        for k, v in display_rows:
+            # Математически точное выравнивание
+            spacing = content_width - len(k) - len(v) - 3
+            lines.append(f"┃ {k} : {v}{' ' * spacing} ┃")
+
+        lines.append(bottom)
+        return "\n".join(lines)
+        
+    def __init__(self, **data: Any) -> None:  # noqa: ANN401
+        """Рассчитываем общий рейтинг по 10 параметрам."""
+        
+        # 1. Список полей для расчета
+        rating_keys = [
+            "rating_characters", "rating_plot", "rating_size", 
+            "rating_prose", "rating_ending", "rating_depth", 
+            "rating_atmosphere", "rating_rereadability", 
+            "rating_expected_real", "rating_recommend"
+        ]
+        
+        # 2. Считаем сумму из входящего словаря данных
+        # Если каких-то данных нет, берем 0.0
+        total = sum(float(data.get(k, 0.0) or 0.0) for k in rating_keys)
+        
+        # 3. Записываем результат в словарь данных, который пойдет в базу
+        data["total_rating"] = total
+        
+        # 4. Вызываем инициализацию родительского класса (SQLModel)
+        super().__init__(**data)
+        
+        # 5. Принудительно обновляем атрибут после создания (для надежности)
+        self.total_rating = total
+        
+    
+    @property
+    def status_ru(self) -> str:
+        """Локализация статуса прочтения книги."""
+        return translate(self.status)
+
+    @property
+    def format_ru(self) -> str:
+        """Локализация формата книги."""
+        return translate(self.format)
+
+    @property
+    def primary_genres_list_ru(self) -> list[str]:
+        """Локализация списка основных жанров."""
+        return [translate(g) for g in self.primary_genres_list]
+
+    @property
+    def detailed_genres_list_ru(self) -> list[dict[str, str]]:
+        """Локализация список жанров и поджанров."""
+        
+        results = []
+        for g in self.detailed_genres_list:
+            name_ru = translate(g["name"])
+            
+            subs = g["sub"].split(",")
+            subs_ru = ", ".join([translate(s.strip()) for s in subs if s.strip()])
+            
+            results.append({"name": name_ru, "sub": subs_ru})
+        return results
+    
+    @property
+    def ratings_map(self) -> list[dict[str, Any]]:
+        """Возвращает список словарей с переведенным именем и значением рейтинга."""
+        
+        keys = [
+            "rating_characters", "rating_plot", "rating_size", "rating_prose",
+            "rating_ending", "rating_depth", "rating_atmosphere", 
+            "rating_rereadability", "rating_expected_real", "rating_recommend"
+        ]
+        return [
+            {"label": translate(k), "value": getattr(self, k), "percent": getattr(self, k) * 10}
+            for k in keys
+        ]
 ```
 
 ---
@@ -523,12 +781,12 @@ class BookRepository(BaseRepository[Book]):
 ```python
 """Роутер для управления разделом книг."""
 
-from typing import Annotated, Any, cast
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
-from sqlmodel import Session, select
+from sqlmodel import Session, func, select
 
 from src.core.database import get_session
 from src.parser.sync import sync_books
@@ -546,24 +804,60 @@ async def list_books(
     request: Request, 
     session: SessionDep, 
     sort: str = "total_rating",
-    order: str = "desc"
+    order: str = "desc",
+    page: int = 1,
+    size: int = 20
 ) -> HTMLResponse:
-    """Список книг с универсальной сортировкой."""
+    """
+        Список книг с пагинацией и сортировкой.
     
-    # Получаем атрибут модели динамически
+        Args:
+            request: Объект HTTP-запроса.
+            session: Текущая сессия.
+            sort: Колонка для первоначальной сортировки.
+            order: Тип сортировки (по возрастанию/убыванию).
+            page: Первоначальная страница.
+            size: Кол-во документов на странице.
+        
+        Returns:
+            HTMLResponse: Обновленный шаблон страницы.
+    """
+    
+    # 1. Считаем общее количество книг
+    total_count = session.exec(select(func.count()).select_from(Book)).one()
+    
+    # 2. Рассчитываем общее количество страниц
+    total_pages = (total_count + size - 1) // size
+    
+    # 3. Защита от выхода за границы
+    if page < 1:
+        page = 1
+    if page > total_pages and total_pages > 0:
+        page = total_pages
+        
+    # 4. Рассчет диапазона ближайщих страниц
+    start_range = max(1, page - 2)
+    end_range = min(total_pages, page + 2)
+    page_numbers = list(range(start_range, end_range + 1))
+
+    # 5. Получаем атрибут для сортировки
     column = getattr(Book, sort, Book.total_rating)
+    expression = column.desc() if order == "desc" else column.asc()
     
-    # Применяем направление
-    attr = cast(Any, column) # Подсказка для mypy
-    expression = attr.desc() if order == "desc" else attr.asc()
-    
-    statement = select(Book).order_by(expression)
+    # 6. Запрос с лимитом и смещением (LIMIT / OFFSET)
+    offset = (page - 1) * size
+    statement = select(Book).order_by(expression).offset(offset).limit(size)
     books = session.exec(statement).all()
     
-    # Словарь понятных названий для кнопки
+    # 7. Номера книг, показанных на текущей странице
+    showing_from = offset + 1 if total_count > 0 else 0
+    showing_to = min(offset + size, total_count)
+    
+    # Варинты сортировки списка книг
     labels = {
         "total_rating": "Общий рейтинг",
         "total": "Количество страниц",
+        "year": "Год издания",
         "rating_characters": "Герои",
         "rating_plot": "Сюжет",
         "rating_size": "Объем",
@@ -572,7 +866,7 @@ async def list_books(
         "rating_depth": "Глубина",
         "rating_atmosphere": "Атмосфера",
         "rating_rereadability": "Перечитывание",
-        "rating_expected_real": "Ожидание/Реальность",
+        "rating_expected_real": "Ожидание / Реальность",
         "rating_recommend": "Рекомендация"
     }
     
@@ -583,6 +877,12 @@ async def list_books(
             "books": books, 
             "current_sort": sort,
             "current_order": order,
+            "current_page": page,
+            "total_pages": total_pages,
+            "page_numbers": page_numbers,
+            "showing_from": showing_from,
+            "showing_to": showing_to,
+            "total_count": total_count,
             "sort_label": labels.get(sort, "Сортировка"),
             "labels": labels
         }
@@ -599,7 +899,18 @@ async def sync_books_endpoint(request: Request, session: SessionDep) -> HTMLResp
 
 @router.get("/{book_id}")
 async def book_detail(request: Request, book_id: int, session: SessionDep) -> HTMLResponse:
-    """Детальная страница книги."""
+    """
+        Детальная страница книги.
+
+        Args:
+            request: Объект HTTP-запроса
+            book_id: Путь к файлу в Obsidian Vault
+            session: Текущая сессия
+        
+        Returns:
+            HTMLResponse: Обновленный шаблон страницы
+    """
+    
     book = session.get(Book, book_id)
     if not book:
         raise HTTPException(status_code=404, detail="Книга не найдена")
@@ -670,7 +981,6 @@ class BookService:
 ```python
 """Модуль обработки заметок о книгах."""
 
-import re
 from pathlib import Path
 
 import frontmatter
@@ -686,7 +996,17 @@ class BookTransformer:
     
     @staticmethod
     def transform(file_path: Path, vault_path: Path, mtime: float) -> Book:
-        """Превращает Markdown файл в объект Book с расчетом суммы рейтинга."""
+        """
+            Превращает Markdown файл в объект Book с расчетом суммы рейтинга.
+
+            Args:
+                file_path: Полный путь к Mardown файлу
+                vault_path: Полный путь к базе знаний Obsidian
+                mtime: Время последнего обновления
+            
+            Returns:
+                Book: Готовая модель класса Book
+        """
         
         logger.debug(f"Начало обработки: {file_path.name}")
         
@@ -698,105 +1018,41 @@ class BookTransformer:
             raise ValidationError(f"Ошибка структуры YAML: {e}") from e
         
         meta = post.metadata
-        rel_path = str(file_path.relative_to(vault_path))
 
-        # 1. Проверка 10 параметров рейтинга
-        rating_keys = [
-            "rating_characters", "rating_plot", "rating_size",
-            "rating_prose", "rating_ending", "rating_depth",
-            "rating_atmosphere", "rating_rereadability",
-            "rating_expected_real", "rating_recommend"
-        ]
-        
-        total_score = 0.0
-        ratings_data = {}
-        for key in rating_keys:
-            val = meta.get(key)
-            # Проверяем, что значение есть и оно числовое (не None и не пустая строка)
-            if val is None or val == "":
-                logger.warning(f"Пропущен обязательный рейтинг: {key}")
-                raise ValidationError(f"Пропущен обязательный рейтинг: {key}")
-            try:
-                numeric_val = float(val)
-                ratings_data[key] = numeric_val
-                total_score += numeric_val
-            except ValueError as e:
-                logger.warning(f"Рейтинг {key} должен быть числом")
-                raise ValidationError(f"Рейтинг {key} должен быть числом") from e
-
-        # 2. Проверка обязательных метаданных
-        required_meta = {
-            "author": "Автор",
-            "country_author": "Страна автора",
-            "total": "Количество страниц (total)",
-            "year": "Год",
-            "status": "Статус",
-            "genres": "Жанры",
-            "format": "Формат",
-            "language": "Язык",
-            "bg_color": "Цвет фона",
-            "text_color": "Цвет текста"
-        }
-
-        for key, label in required_meta.items():
-            if not meta.get(key):
-                logger.warning(f"Поле '{label}' ({key}) не заполнено")
-                raise ValidationError(f"Поле '{label}' ({key}) не заполнено")
-
-        # 3. Валидация жанров и поджанров (от 1 до 3)
-        raw_genres = str(meta.get("genres", ""))
-        logger.debug(f"Полученная строка жанров - {raw_genres}")
-        
-        # 1. Регулярка для разделения по запятым, которые НЕ в скобках
-        # Разделяет "fantasy (dark, epic), drama" на ["fantasy (dark, epic)", "drama"]
-        genre_blocks = re.split(r',\s*(?![^()]*\))', raw_genres)
-        genre_blocks = [g.strip() for g in genre_blocks if g.strip()]
-        logger.debug(f"Разделенные жанры - {genre_blocks}")
-
-        if not (1 <= len(genre_blocks) <= 3):
-            logger.warning(f"Должно быть от 1 до 3 основных жанров (найдено: {len(genre_blocks)})")
-            raise ValidationError(f"Должно быть от 1 до 3 основных жанров (найдено: {len(genre_blocks)})")
-
-        for block in genre_blocks:
-            # Ищем поджанры внутри скобок
-            subgenres_match = re.search(r'\((.*?)\)', block)
-            if subgenres_match:
-                subgenres_str = subgenres_match.group(1)
-                sub_list = [s.strip() for s in subgenres_str.split(',') if s.strip()]
-                if len(sub_list) > 2:
-                    logger.warning(f"В жанре '{block}' более 2-х поджанров")
-                    raise ValidationError(f"В жанре '{block}' более 2-х поджанров")
-
-        # 4. Валидация HEX-цветов (должны начинаться с #)
-        for color_key in ["bg_color", "text_color"]:
-            color = str(meta.get(color_key, ""))
-            if not color.startswith("#") or len(color) not in [4, 7]:
-                logger.warning(f"Поле {color_key} должно быть в формате HEX (#ffffff)")
-                raise ValidationError(f"Поле {color_key} должно быть в формате HEX (#ffffff)")
-
-        logger.debug(f"Конец обработки: {file_path.name}")
+        # Извлекаем все данные из метадаты, валидация автоматическая
         return Book(
             title=meta.get("title", file_path.stem),
             title_orig=meta.get("title_orig"),
             author=meta.get("author"),
             country_author=meta.get("country_author"),
-            year=int(meta.get("year", 0)),
-            total=int(meta.get("total", 0)),
+            year=meta.get("year"),
+            total=meta.get("total"),
             isbn=meta.get("isbn"),
-            status=meta.get("status"),
-            genres=", ".join(raw_genres),
+            status=meta.get("status", "finished"),
+            genres=str(meta.get("genres")),
             series=meta.get("series"),
             format=meta.get("format"),
             language=meta.get("language"),
-            started=meta.get("started"),
-            finished=meta.get("finished"),
-            bg_color=str(meta.get("bg_color")),
-            text_color=str(meta.get("text_color")),
-            total_rating=total_score,
-            file_path=rel_path,
+            started=str(meta.get("started", "")) if meta.get("started") else None,
+            finished=str(meta.get("finished", "")) if meta.get("finished") else None,
+            bg_color=str(meta.get("bg_color", "#ffffff")),
+            text_color=str(meta.get("text_color", "#000000")),
+            
+            rating_characters=meta.get("rating_characters"),
+            rating_plot=meta.get("rating_plot"),
+            rating_size=meta.get("rating_size"),
+            rating_prose=meta.get("rating_prose"),
+            rating_ending=meta.get("rating_ending"),
+            rating_depth=meta.get("rating_depth"),
+            rating_atmosphere=meta.get("rating_atmosphere"),
+            rating_rereadability=meta.get("rating_rereadability"),
+            rating_expected_real=meta.get("rating_expected_real"),
+            rating_recommend=meta.get("rating_recommend"),
+            
+            # Находим относительный путь к файлу относительно всей базы
+            file_path=str(file_path.relative_to(vault_path)),
             last_modified=mtime,
-            created_at=str(meta.get("created", "")),
-            **ratings_data
+            created_at=str(meta.get("created", ""))
         )
 ```
 
@@ -857,13 +1113,15 @@ import time
 from pathlib import Path
 from typing import Any
 
+from pydantic import ValidationError as PydanticValidationError
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session
 
 from src.core.config import settings
-from src.core.exceptions import ValidationError
 from src.core.logger import logger
 from src.modules.books.repository import BookRepository
 from src.modules.books.transformer import BookTransformer
+from src.web.router import stats_cache
 
 from .engine import ScannerEngine
 
@@ -874,6 +1132,12 @@ def sync_books(session: Session) -> dict[str, Any]:
     
         Если файл не менялся, пропускается, иначе файл парсится и обновляется информация в БД.
         Если обработка заметки завершилась ошибкой, она не будет добавлена в БД.
+        
+        Args:
+            session: Текущая сессия
+            
+        Returns:
+            dict[str, Any] - Словарь статистики статусов синхронизации файлов
     """
     
     start_time = time.time()
@@ -888,35 +1152,77 @@ def sync_books(session: Session) -> dict[str, Any]:
     
     logger.info(f"Сканирование завершено. Найдено файлов: {len(files)}")
     
-    stats: dict[str, Any] = {"total": len(files), "updated": 0, "errors": 0, "error_details": []}
+    # --- Сверка путей к файлам в БД с реальными файлами в базе знаний ---
+    db_paths = set(repo.get_all_paths())
+    current_files_rel = {str(f[0].relative_to(vault_path)) for f in files}
+    
+    deleted_count = 0
+    paths_to_delete = db_paths - current_files_rel
+    logger.info(f"Кол-во файлов в БД, которых нет в системе - {len(paths_to_delete)}")
+    for path in paths_to_delete:
+        repo.delete_by_path(path)
+        logger.info(f"Удалена запись (файл не найден): {path}")
+        deleted_count += 1
+    
+    stats: dict[str, Any] = {
+        "total": len(files),
+        "updated": 0,
+        "errors": 0,
+        "deleted": deleted_count,
+        "error_details": []
+    }
     
     for f_path, mtime in files:
         rel_path = str(f_path.relative_to(vault_path))
-        
-        db_item = repo.get_by_path(rel_path)
-        if db_item and db_item.last_modified >= mtime:
-            logger.debug(f"Пропуск (не менялся): {rel_path}")
+    
+        # 1. Попытка поиска (может упасть, если прошлая итерация не сделала rollback)
+        try:
+            db_item = repo.get_by_path(rel_path)
+            if db_item and db_item.last_modified >= mtime:
+                logger.debug(f"Пропуск (не менялся): {rel_path}")
+                continue
+        except Exception as e:
+            logger.error(f"Ошибка доступа к БД при поиске {rel_path}: {e}")
+            session.rollback() # Чиним сессию
             continue
             
         try:
             logger.info(f"Обработка файла: {rel_path}")
             book_obj = BookTransformer.transform(f_path, vault_path, mtime)
+            
             repo.upsert(book_obj)
+            logger.debug(book_obj.to_pretty_str)
+            
             stats["updated"] += 1
             logger.success(f"Обновлено: {book_obj.title}")
             
-        except ValidationError as e:
-            logger.warning(f"Ошибка валидации в {rel_path}: {e}")
+        except PydanticValidationError as e:
+            # Ошибки структуры (пропущенные поля, типы данных)
+            error_msg = " | ".join([f"{err['loc'][0]}: {err['msg']}" for err in e.errors()])
+            logger.warning(f"Ошибка валидации в {rel_path}: {error_msg}")
             stats["errors"] += 1
-            stats["error_details"].append({"file": rel_path, "error": str(e)})
+            stats["error_details"].append({"file": rel_path, "error": error_msg})
+            
+        except IntegrityError as e:
+            # Ошибки базы данных (NOT NULL, Unique и т.д.)
+            session.rollback()
+            error_msg = f"Ошибка базы данных (проверьте обязательные поля): {e.orig}"
+            logger.error(f"Ошибка записи в БД {rel_path}: {error_msg}")
+            stats["errors"] += 1
+            stats["error_details"].append({"file": rel_path, "error": "Ошибка структуры БД (пропущены поля?)"}) 
             
         except Exception as e:
-            logger.error(f"Ошибка в {rel_path}: {e}")
+            session.rollback()
+            logger.error(f"Непредвиденная ошибка в {rel_path}: {e}")
             stats["errors"] += 1
+
+    # Сбрасываем кэш статистики после успешной синхронизации
+    stats_cache.clear()
 
     duration = round(time.time() - start_time, 2)
     logger.info(f"Синхронизация окончена за {duration}с. Обновлено: {stats['updated']}, Ошибок: {stats['errors']}")
     return stats
+
 ```
 
 ---
@@ -925,7 +1231,7 @@ def sync_books(session: Session) -> dict[str, Any]:
 ```python
 """Роутер для основных страниц сайта."""
 
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
@@ -935,35 +1241,64 @@ from sqlmodel import Session, func, select
 from src.core.database import get_session
 from src.modules.books.models import Book
 
+
+class StatsCache:
+    """Кеш статистики с главной страницы. Обновляется каждый раз после синхронизации."""
+    def __init__(self) -> None:
+        """Создаем пустой кеш статистики главной страницы."""
+        self._data: dict[str, Any] | None = None
+
+    def get(self) -> dict[str, Any] | None:
+        """Возвращаем текущий кеш статистики."""
+        return self._data
+
+    def set(self, data: dict[str, Any]) -> None:
+        """Обновление текущего кеша."""
+        self._data = data
+
+    def clear(self) -> None:
+        """Очистка текущего кеша."""
+        self._data = None
+
+stats_cache = StatsCache()
+
 router = APIRouter(tags=["Web"])
 templates = Jinja2Templates(directory="src/web/templates")
 SessionDep = Annotated[Session, Depends(get_session)]
 
 @router.get("/", response_class=HTMLResponse)
 async def index(request: Request, session: SessionDep) -> HTMLResponse:
-    """Подсчитывание статистики книг."""
+    """Подсчитывание статистики книг (с кэшированием)."""
     
+    # Проверяем наличие данных в кэше
+    cached_stats = stats_cache.get()
+    if cached_stats:
+        return templates.TemplateResponse(
+            "pages/index.html", {"request": request, "stats": cached_stats}
+        )
+
+    # Если кэша нет — считаем
     total_books = session.exec(select(func.count()).select_from(Book)).one()
     total_pages = session.exec(select(func.sum(Book.total))).one() or 0
     avg_rating = session.exec(select(func.avg(Book.total_rating))).one() or 0
-
     finished_books = session.exec(select(func.count()).where(Book.status == "finished")).one()
     reading_books = session.exec(select(func.count()).where(Book.status == "reading")).one()
 
-    return templates.TemplateResponse(
-        "pages/index.html", 
-        {
-            "request": request, 
-            "stats": {
-                "books": {
-                    "total": total_books,
-                    "pages": total_pages,
-                    "avg": round(avg_rating, 1),
-                    "finished": finished_books,
-                    "reading": reading_books
-                }
-            }
+    new_stats = {
+        "books": {
+            "total": total_books,
+            "pages": total_pages,
+            "avg": round(avg_rating, 1),
+            "finished": finished_books,
+            "reading": reading_books
         }
+    }
+    
+    # Обновляем кеш
+    stats_cache.set(new_stats)
+
+    return templates.TemplateResponse(
+        "pages/index.html", {"request": request, "stats": new_stats}
     )
 ```
 
@@ -1111,6 +1446,23 @@ body {
 .row-title { font-weight: 800; font-size: 1.15rem; }
 .row-author { font-size: 0.9rem; opacity: 0.7; }
 .status-pill.dynamic-pill { background: rgba(0,0,0,0.08) !important; padding: 4px 10px; border-radius: 8px; font-size: 0.7rem; font-weight: 800; text-transform: uppercase; }
+
+/* Кнопка страницы */
+.page-button {
+    width: 40px !important; /* Принудительно фиксируем ширину */
+    height: 45px;
+    font-weight: 700;
+    font-size: 0.95rem;
+    border-radius: 12px;
+}
+
+/* Активная страница (максимальный приоритет) */
+.page-button.active {
+    background: var(--primary) !important; /* Используем background вместо background-color */
+    color: #ffffff !important;
+    border-color: var(--primary) !important;
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3); /* Добавим легкое свечение для красоты */
+}
 ```
 
 ---
@@ -1123,6 +1475,8 @@ body {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Obsidian Analytics</title>
+    <link rel="icon" href="https://fav.farm/🪐">
+    
     <!-- Подключаем современный шрифт Inter -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1130,6 +1484,7 @@ body {
     
     <link rel="stylesheet" href="{{ url_for('static', path='css/style.css') }}">
     <script src="https://unpkg.com/htmx.org@2.0.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
 
@@ -1139,7 +1494,7 @@ body {
                 🪐 Life<span>Dash</span>
             </a>
             <ul class="nav-links">
-                <li><a href="/books" class="active">Книги</a></li>
+                <li><a href="/books/" class="active">Книги</a></li>
                 <li><a href="#" class="disabled">Игры</a></li>
                 <li><a href="#" class="disabled">Кино</a></li>
                 <li><a href="#" class="disabled">Итоги</a></li>
@@ -1181,8 +1536,9 @@ body {
     <div style="display: flex; justify-content: space-between; align-items: center;">
         <div>
             <strong>Синхронизация завершена!</strong><br>
-            Обработано файлов: {{ stats.total }} | 
-            Обновлено в базе: {{ stats.updated }} | 
+            Найдено: {{ stats.total }} | 
+            Обновлено: {{ stats.updated }} | 
+            Удалено (отсутствующих): {{ stats.deleted }} |
             Ошибок: {{ stats.errors }}
         </div>
         <button onclick="this.parentElement.parentElement.remove()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: inherit;">&times;</button>
@@ -1225,7 +1581,7 @@ body {
             </button>
             <div class="dropdown-content">
                 {% for key, label in labels.items() %}
-                <a href="?sort={{ key }}&order={{ current_order }}" class="{{ 'active' if current_sort == key }}">
+                <a href="?sort={{ key }}&order={{ current_order }}&page=1" class="{{ 'active' if current_sort == key }}">
                     {{ label }}
                 </a>
                 {% endfor %}
@@ -1285,7 +1641,7 @@ body {
         </div>
 
         <div class="row-genres">
-            {% for genre in book.primary_genres_list %}
+            {% for genre in book.primary_genres_list_ru %}
             <div class="list-genre-tag">
                 {{ genre }}
             </div>
@@ -1293,7 +1649,7 @@ body {
         </div>
 
         <div class="row-meta" style="text-align: right;"><strong>{{ book.total }}</strong></div>
-        <div style="display: flex; justify-content: center;"><span class="status-pill dynamic-pill">{{ book.status }}</span></div>
+        <div style="display: flex; justify-content: center;"><span class="status-pill dynamic-pill">{{ book.status_ru }}</span></div>
 
         <div style="display: flex; justify-content: flex-end;">
             <object>
@@ -1306,6 +1662,54 @@ body {
         </div>
     </a>
     {% endfor %}
+
+    <!-- Блок Пагинации -->
+    {% if total_pages > 1 %}
+    <div style="margin-top: 4rem; display: flex; justify-content: center; align-items: center; gap: 0.5rem;">
+        
+        <!-- Первая страница -->
+        {% if current_page > 3 %}
+            <a href="?page=1&sort={{ current_sort }}&order={{ current_order }}" 
+            class="order-toggle" style="width: auto; padding: 0 12px; font-weight: 800;">« 1</a>
+            <span style="color: #cbd5e1; margin: 0 5px;">...</span>
+        {% endif %}
+
+        <!-- Назад -->
+        {% if current_page > 1 %}
+            <a href="?page={{ current_page - 1 }}&sort={{ current_sort }}&order={{ current_order }}" 
+            class="order-toggle" style="width: auto; padding: 0 15px;">‹</a>
+        {% endif %}
+
+        <!-- Цифры -->
+        {% for p in page_numbers %}
+            <a href="?page={{ p }}&sort={{ current_sort }}&order={{ current_order }}" 
+            class="order-toggle page-button {{ 'active' if p|int == current_page|int else '' }}">
+                {{ p }}
+            </a>
+        {% endfor %}
+
+        <!-- Вперед -->
+        {% if current_page < total_pages %}
+            <a href="?page={{ current_page + 1 }}&sort={{ current_sort }}&order={{ current_order }}" 
+            class="order-toggle" style="width: auto; padding: 0 15px;">›</a>
+        {% endif %}
+
+        <!-- Последняя страница -->
+        {% if current_page < total_pages - 2 %}
+            <span style="color: #cbd5e1; margin: 0 5px;">...</span>
+            <a href="?page={{ total_pages }}&sort={{ current_sort }}&order={{ current_order }}" 
+            class="order-toggle" style="width: auto; padding: 0 12px; font-weight: 800;">{{ total_pages }} »</a>
+        {% endif %}
+
+    </div>
+
+    <!-- Текст статистики -->
+    <div style="text-align: center; margin-top: 1.5rem; font-size: 0.75rem; color: #94a3b8; font-weight: 800; text-transform: uppercase; letter-spacing: 1px;">
+        Показано {{ showing_from }}–{{ showing_to }} из {{ total_count }} книг
+    </div>
+
+    {% endif %}
+
 </div>
 {% endblock %}
 ```
@@ -1318,7 +1722,7 @@ body {
 
 {% block content %}
 <div style="max-width: 900px; margin: 0 auto;">
-    <a href="/books" style="display: inline-block; margin-bottom: 2rem; color: #636e72; text-decoration: none; font-weight: 500;">
+    <a href="/books/" style="display: inline-block; margin-bottom: 2rem; color: #636e72; text-decoration: none; font-weight: 500;">
         ← Вернуться в библиотеку
     </a>
 
@@ -1328,7 +1732,7 @@ body {
             <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                 <div style="flex: 1;">
                     <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 1.5rem;">
-                        {% for genre in book.detailed_genres_list %}
+                        {% for genre in book.detailed_genres_list_ru %}
                             <div style="background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.2); padding: 4px 12px; border-radius: 8px; display: flex; align-items: center; gap: 8px; backdrop-filter: blur(4px);">
                                 <span style="font-weight: 800; text-transform: uppercase; font-size: 0.7rem; letter-spacing: 0.5px;">
                                     {{ genre.name }}
@@ -1359,8 +1763,8 @@ body {
                 <div>
                     <h4 style="margin: 0; color: #a4b0be; text-transform: uppercase; font-size: 0.75rem; font-weight: 800; letter-spacing: 1px;">Метаданные</h4>
                     <ul style="list-style: none; padding: 0; margin: 1rem 0;">
-                        <li style="margin-bottom: 5px;"><strong>Статус:</strong> {{ book.status }}</li>
-                        <li style="margin-bottom: 5px;"><strong>Формат:</strong> {{ book.format }}</li>
+                        <li style="margin-bottom: 5px;"><strong>Статус:</strong> {{ book.status_ru }}</li>
+                        <li style="margin-bottom: 5px;"><strong>Формат:</strong> {{ book.format_ru }}</li>
                         <li style="margin-bottom: 5px;"><strong>Язык:</strong> {{ book.language }}</li>
                     </ul>
                 </div>
@@ -1368,6 +1772,36 @@ body {
                     <h4 style="margin: 0; color: #a4b0be; text-transform: uppercase; font-size: 0.75rem; font-weight: 800; letter-spacing: 1px;">Объем</h4>
                     <p style="font-size: 1.25rem; margin: 1rem 0 0.5rem 0;"><strong>{{ book.total }}</strong> страниц</p>
                     <small style="color: var(--text-muted);">Период: {{ book.started or '?' }} — {{ book.finished or '?' }}</small>
+                </div>
+            </div>
+
+            <!-- Секция 10 рейтинговых параметров -->
+            <div style="margin-bottom: 4rem;">
+                <h2 style="font-size: 1.5rem; letter-spacing: -0.5px; margin-bottom: 2rem; display: flex; align-items: center; gap: 10px;">
+                    <span>📊</span> Рейтинговый профиль
+                </h2>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4rem; align-items: center;">
+                    
+                    <!-- Левая колонка: График-паутинка -->
+                    <div style="background: #f8fafc; padding: 2rem; border-radius: 24px; position: relative;">
+                        <canvas id="bookRadarChart"></canvas>
+                    </div>
+
+                    <!-- Правая колонка: Список рейтингов с полосками -->
+                    <div style="display: flex; flex-direction: column; gap: 1.2rem;">
+                        {% for item in book.ratings_map %}
+                        <div class="rating-item">
+                            <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 6px;">
+                                <span style="font-size: 0.75rem; font-weight: 800; color: #94a3b8; text-transform: uppercase;">{{ item.label }}</span>
+                                <span style="font-size: 1rem; font-weight: 800;">{{ item.value|round(1) }}</span>
+                            </div>
+                            <div style="height: 6px; background: #e2e8f0; border-radius: 10px; overflow: hidden;">
+                                <div style="width: {{ item.percent }}%; height: 100%; background: {{ book.bg_color }};"></div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
                 </div>
             </div>
 
@@ -1401,6 +1835,73 @@ body {
         </div>
     </div>
 </div>
+
+<script>
+// Функция инициализации графика
+function initChart() {
+    const canvas = document.getElementById('bookRadarChart');
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    const bookColor = '{{ book.bg_color }}';
+    
+    // Проверка, не создан ли уже график (актуально для HTMX)
+    if (window.myRadarChart) {
+        window.myRadarChart.destroy();
+    }
+
+    window.myRadarChart = new Chart(ctx, {
+        type: 'radar',
+        data: {
+            labels: [{% for item in book.ratings_map %}'{{ item.label }}'{% if not loop.last %}, {% endif %}{% endfor %}],
+            datasets: [{
+                data: [{% for item in book.ratings_map %}{{ item.value }}{% if not loop.last %}, {% endif %}{% endfor %}],
+                fill: true,
+                backgroundColor: bookColor + '33',
+                borderColor: bookColor,
+                borderWidth: 2,
+                pointBackgroundColor: bookColor,
+                pointBorderColor: '#fff',
+                pointRadius: 3
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            scales: {
+                r: {
+                    min: 0,
+                    max: 10,
+                    beginAtZero: true,
+                    ticks: { display: false, stepSize: 2 },
+                    pointLabels: {
+                        font: { size: 10, weight: 'bold' },
+                        color: '#64748b'
+                    },
+                    grid: { color: '#e2e8f0' },
+                    angleLines: { color: '#e2e8f0' }
+                }
+            },
+            plugins: {
+                legend: { display: false }
+            }
+        }
+    });
+}
+
+// Запуск при обычной загрузке
+if (document.readyState === 'complete') {
+    initChart();
+} else {
+    window.addEventListener('load', initChart);
+}
+
+// Запуск для HTMX (если вы переходите на страницу через hx-get)
+document.body.addEventListener('htmx:afterOnLoad', function() {
+    initChart();
+});
+</script>
+
 {% endblock %}
 ```
 
@@ -1430,7 +1931,7 @@ body {
     <div class="stat-card" style="background: white; padding: 2rem; border-radius: 24px; border: 1px solid #e2e8f0; box-shadow: var(--shadow);">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
             <h2 style="margin: 0; font-size: 1.5rem; font-weight: 700;">📚 Книги</h2>
-            <a href="/books" class="btn-primary" style="padding: 6px 14px; font-size: 0.8rem;">Открыть</a>
+            <a href="/books/" class="btn-primary" style="padding: 6px 14px; font-size: 0.8rem;">Открыть</a>
         </div>
 
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">

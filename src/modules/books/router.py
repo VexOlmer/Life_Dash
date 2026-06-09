@@ -27,7 +27,20 @@ async def list_books(
     page: int = 1,
     size: int = 20
 ) -> HTMLResponse:
-    """Список книг с пагинацией и сортировкой."""
+    """
+        Список книг с пагинацией и сортировкой.
+    
+        Args:
+            request: Объект HTTP-запроса.
+            session: Текущая сессия.
+            sort: Колонка для первоначальной сортировки.
+            order: Тип сортировки (по возрастанию/убыванию).
+            page: Первоначальная страница.
+            size: Кол-во документов на странице.
+        
+        Returns:
+            HTMLResponse: Обновленный шаблон страницы.
+    """
     
     # 1. Считаем общее количество книг
     total_count = session.exec(select(func.count()).select_from(Book)).one()
@@ -55,6 +68,7 @@ async def list_books(
     statement = select(Book).order_by(expression).offset(offset).limit(size)
     books = session.exec(statement).all()
     
+    # 7. Номера книг, показанных на текущей странице
     showing_from = offset + 1 if total_count > 0 else 0
     showing_to = min(offset + size, total_count)
     
