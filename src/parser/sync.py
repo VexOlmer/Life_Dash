@@ -48,7 +48,10 @@ def sync_books(session: Session) -> dict[str, Any]:
         try:
             logger.info(f"Обработка файла: {rel_path}")
             book_obj = BookTransformer.transform(f_path, vault_path, mtime)
+            
             repo.upsert(book_obj)
+            logger.debug(book_obj.to_pretty_str)
+            
             stats["updated"] += 1
             logger.success(f"Обновлено: {book_obj.title}")
             

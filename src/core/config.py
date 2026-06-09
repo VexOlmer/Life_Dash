@@ -34,7 +34,7 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str = "sqlite:///./data/db.sqlite"
 
-    DEBUG: bool = True
+    DEBUG: bool = False
     HOST: str = "127.0.0.1"
     PORT: int = 8000
 

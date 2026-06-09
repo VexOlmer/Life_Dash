@@ -78,7 +78,7 @@ class BookTransformer:
         logger.debug(f"Полученная строка жанров - {raw_genres}")
         
         # 1. Регулярка для разделения по запятым, которые НЕ в скобках
-        # Разделяет "fantasy (dark, epic), drama" на ["fantasy (dark, epic)", "drama"]
+        # Разделяет "fantasy (dark, epic), drama" на ["fantasy (dark, epic)", "drama"] игнорируя запятую внутри скобок поджанров
         genre_blocks = re.split(r',\s*(?![^()]*\))', raw_genres)
         genre_blocks = [g.strip() for g in genre_blocks if g.strip()]
         logger.debug(f"Разделенные жанры - {genre_blocks}")
@@ -90,6 +90,7 @@ class BookTransformer:
         for block in genre_blocks:
             # Ищем поджанры внутри скобок
             subgenres_match = re.search(r'\((.*?)\)', block)
+            logger.debug(f"Поджанры - {subgenres_match}")
             if subgenres_match:
                 subgenres_str = subgenres_match.group(1)
                 sub_list = [s.strip() for s in subgenres_str.split(',') if s.strip()]
@@ -114,7 +115,7 @@ class BookTransformer:
             total=int(meta.get("total", 0)),
             isbn=meta.get("isbn"),
             status=meta.get("status"),
-            genres=", ".join(raw_genres),
+            genres=", ".join(genre_blocks),
             series=meta.get("series"),
             format=meta.get("format"),
             language=meta.get("language"),
