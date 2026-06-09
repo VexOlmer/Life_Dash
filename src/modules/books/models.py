@@ -6,6 +6,8 @@ from typing import Any
 from pydantic import ConfigDict, field_validator
 from sqlmodel import Field, SQLModel
 
+from src.common.utils import translate
+
 
 class Book(SQLModel, table=True):
     """Модель книги на основе расширенного шаблона Obsidian."""
@@ -136,49 +138,49 @@ class Book(SQLModel, table=True):
     
     @property
     def to_pretty_str(self) -> str:
-            """Возвращает идеально выровненную таблицу данных книги для логов."""
-                
-            # 1. Получаем данные через __dict__, чтобы SQLModel ничего не скрыл
-            # Исключаем служебные и внутренние поля SQLAlchemy
-            exclude = {"id", "last_modified", "metadata", "registry"}
+        """Возвращает идеально выровненную таблицу данных книги для логов."""
             
-            display_rows = []
-            max_key_width = 0
-            max_val_width = 0
+        # 1. Получаем данные через __dict__, чтобы SQLModel ничего не скрыл
+        # Исключаем служебные и внутренние поля SQLAlchemy
+        exclude = {"id", "last_modified", "metadata", "registry"}
+        
+        display_rows = []
+        max_key_width = 0
+        max_val_width = 0
 
-            # Проходимся по всем полям модели
-            for key in self.model_fields.keys():
-                if key in exclude:
-                    continue
-                
-                val = getattr(self, key)
-                display_key = key.replace("_", " ").capitalize()
-                display_val = str(val) if val is not None else "-"
-                
-                display_rows.append((display_key, display_val))
-                max_key_width = max(max_key_width, len(display_key))
-                max_val_width = max(max_val_width, len(display_val))
-
-            # 2. Расчет ширины
-            title_line = f"BOOK DATA: {self.title}"
-            # Даем запас под длинные пути
-            content_width = max(max_key_width + max_val_width + 5, len(title_line), 60)
+        # Проходимся по всем полям модели
+        for key in self.model_fields.keys():
+            if key in exclude:
+                continue
             
-            # 3. Сборка рамки
-            top    = f"┏{'━' * (content_width + 2)}┓"
-            header = f"┃ {title_line:<{content_width}} ┃"
-            sep    = f"┣{'━' * (content_width + 2)}┫"
-            bottom = f"┗{'━' * (content_width + 2)}┛"
+            val = getattr(self, key)
+            display_key = key.replace("_", " ").capitalize()
+            display_val = str(val) if val is not None else "-"
+            
+            display_rows.append((display_key, display_val))
+            max_key_width = max(max_key_width, len(display_key))
+            max_val_width = max(max_val_width, len(display_val))
 
-            lines = [f"\n{top}", header, sep]
+        # 2. Расчет ширины
+        title_line = f"BOOK DATA: {self.title}"
+        # Даем запас под длинные пути
+        content_width = max(max_key_width + max_val_width + 5, len(title_line), 60)
+        
+        # 3. Сборка рамки
+        top    = f"┏{'━' * (content_width + 2)}┓"
+        header = f"┃ {title_line:<{content_width}} ┃"
+        sep    = f"┣{'━' * (content_width + 2)}┫"
+        bottom = f"┗{'━' * (content_width + 2)}┛"
 
-            for k, v in display_rows:
-                # Математически точное выравнивание
-                spacing = content_width - len(k) - len(v) - 3
-                lines.append(f"┃ {k} : {v}{' ' * spacing} ┃")
+        lines = [f"\n{top}", header, sep]
 
-            lines.append(bottom)
-            return "\n".join(lines)
+        for k, v in display_rows:
+            # Математически точное выравнивание
+            spacing = content_width - len(k) - len(v) - 3
+            lines.append(f"┃ {k} : {v}{' ' * spacing} ┃")
+
+        lines.append(bottom)
+        return "\n".join(lines)
         
     def __init__(self, **data: Any) -> None:  # noqa: ANN401
         """Рассчитываем общий рейтинг по 10 параметрам."""
@@ -203,3 +205,47 @@ class Book(SQLModel, table=True):
         
         # 5. Принудительно обновляем атрибут после создания (для надежности)
         self.total_rating = total
+        
+    
+    @property
+    def status_ru(self) -> str:
+        """Локализация статуса прочтения книги."""
+        return translate(self.status)
+
+    @property
+    def format_ru(self) -> str:
+        """Локализация формата книги."""
+        return translate(self.format)
+
+    @property
+    def primary_genres_list_ru(self) -> list[str]:
+        """Локализация списка основных жанров."""
+        return [translate(g) for g in self.primary_genres_list]
+
+    @property
+    def detailed_genres_list_ru(self) -> list[dict[str, str]]:
+        """Локализация список жанров и поджанров."""
+        
+        results = []
+        for g in self.detailed_genres_list:
+            name_ru = translate(g["name"])
+            
+            subs = g["sub"].split(",")
+            subs_ru = ", ".join([translate(s.strip()) for s in subs if s.strip()])
+            
+            results.append({"name": name_ru, "sub": subs_ru})
+        return results
+    
+    @property
+    def ratings_map(self) -> list[dict[str, Any]]:
+        """Возвращает список словарей с переведенным именем и значением рейтинга."""
+        
+        keys = [
+            "rating_characters", "rating_plot", "rating_size", "rating_prose",
+            "rating_ending", "rating_depth", "rating_atmosphere", 
+            "rating_rereadability", "rating_expected_real", "rating_recommend"
+        ]
+        return [
+            {"label": translate(k), "value": getattr(self, k), "percent": getattr(self, k) * 10}
+            for k in keys
+        ]

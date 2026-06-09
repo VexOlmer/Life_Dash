@@ -15,7 +15,17 @@ class BookTransformer:
     
     @staticmethod
     def transform(file_path: Path, vault_path: Path, mtime: float) -> Book:
-        """Превращает Markdown файл в объект Book с расчетом суммы рейтинга."""
+        """
+            Превращает Markdown файл в объект Book с расчетом суммы рейтинга.
+
+            Args:
+                file_path: Полный путь к Mardown файлу
+                vault_path: Полный путь к базе знаний Obsidian
+                mtime: Время последнего обновления
+            
+            Returns:
+                Book: Готовая модель класса Book
+        """
         
         logger.debug(f"Начало обработки: {file_path.name}")
         
@@ -58,6 +68,7 @@ class BookTransformer:
             rating_expected_real=meta.get("rating_expected_real"),
             rating_recommend=meta.get("rating_recommend"),
             
+            # Находим относительный путь к файлу относительно всей базы
             file_path=str(file_path.relative_to(vault_path)),
             last_modified=mtime,
             created_at=str(meta.get("created", ""))

@@ -13,7 +13,7 @@
             </button>
             <div class="dropdown-content">
                 {% for key, label in labels.items() %}
-                <a href="?sort={{ key }}&order={{ current_order }}" class="{{ 'active' if current_sort == key }}">
+                <a href="?sort={{ key }}&order={{ current_order }}&page=1" class="{{ 'active' if current_sort == key }}">
                     {{ label }}
                 </a>
                 {% endfor %}
@@ -73,7 +73,7 @@
         </div>
 
         <div class="row-genres">
-            {% for genre in book.primary_genres_list %}
+            {% for genre in book.primary_genres_list_ru %}
             <div class="list-genre-tag">
                 {{ genre }}
             </div>
@@ -81,7 +81,7 @@
         </div>
 
         <div class="row-meta" style="text-align: right;"><strong>{{ book.total }}</strong></div>
-        <div style="display: flex; justify-content: center;"><span class="status-pill dynamic-pill">{{ book.status }}</span></div>
+        <div style="display: flex; justify-content: center;"><span class="status-pill dynamic-pill">{{ book.status_ru }}</span></div>
 
         <div style="display: flex; justify-content: flex-end;">
             <object>
@@ -94,5 +94,53 @@
         </div>
     </a>
     {% endfor %}
+
+    <!-- Блок Пагинации -->
+    {% if total_pages > 1 %}
+    <div style="margin-top: 4rem; display: flex; justify-content: center; align-items: center; gap: 0.5rem;">
+        
+        <!-- Первая страница -->
+        {% if current_page > 3 %}
+            <a href="?page=1&sort={{ current_sort }}&order={{ current_order }}" 
+            class="order-toggle" style="width: auto; padding: 0 12px; font-weight: 800;">« 1</a>
+            <span style="color: #cbd5e1; margin: 0 5px;">...</span>
+        {% endif %}
+
+        <!-- Назад -->
+        {% if current_page > 1 %}
+            <a href="?page={{ current_page - 1 }}&sort={{ current_sort }}&order={{ current_order }}" 
+            class="order-toggle" style="width: auto; padding: 0 15px;">‹</a>
+        {% endif %}
+
+        <!-- Цифры -->
+        {% for p in page_numbers %}
+            <a href="?page={{ p }}&sort={{ current_sort }}&order={{ current_order }}" 
+            class="order-toggle page-button {{ 'active' if p|int == current_page|int else '' }}">
+                {{ p }}
+            </a>
+        {% endfor %}
+
+        <!-- Вперед -->
+        {% if current_page < total_pages %}
+            <a href="?page={{ current_page + 1 }}&sort={{ current_sort }}&order={{ current_order }}" 
+            class="order-toggle" style="width: auto; padding: 0 15px;">›</a>
+        {% endif %}
+
+        <!-- Последняя страница -->
+        {% if current_page < total_pages - 2 %}
+            <span style="color: #cbd5e1; margin: 0 5px;">...</span>
+            <a href="?page={{ total_pages }}&sort={{ current_sort }}&order={{ current_order }}" 
+            class="order-toggle" style="width: auto; padding: 0 12px; font-weight: 800;">{{ total_pages }} »</a>
+        {% endif %}
+
+    </div>
+
+    <!-- Текст статистики -->
+    <div style="text-align: center; margin-top: 1.5rem; font-size: 0.75rem; color: #94a3b8; font-weight: 800; text-transform: uppercase; letter-spacing: 1px;">
+        Показано {{ showing_from }}–{{ showing_to }} из {{ total_count }} книг
+    </div>
+
+    {% endif %}
+
 </div>
 {% endblock %}

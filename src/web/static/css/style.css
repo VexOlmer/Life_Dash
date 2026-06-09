@@ -138,3 +138,20 @@ body {
 .row-title { font-weight: 800; font-size: 1.15rem; }
 .row-author { font-size: 0.9rem; opacity: 0.7; }
 .status-pill.dynamic-pill { background: rgba(0,0,0,0.08) !important; padding: 4px 10px; border-radius: 8px; font-size: 0.7rem; font-weight: 800; text-transform: uppercase; }
+
+/* Кнопка страницы */
+.page-button {
+    width: 40px !important; /* Принудительно фиксируем ширину */
+    height: 45px;
+    font-weight: 700;
+    font-size: 0.95rem;
+    border-radius: 12px;
+}
+
+/* Активная страница (максимальный приоритет) */
+.page-button.active {
+    background: var(--primary) !important; /* Используем background вместо background-color */
+    color: #ffffff !important;
+    border-color: var(--primary) !important;
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3); /* Добавим легкое свечение для красоты */
+}
