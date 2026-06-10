@@ -81,21 +81,27 @@ body {
 .list-header, .book-row {
     display: grid;
     /* 
-       Объяснение колонок:
-       60px          - Рейтинг
-       minmax(0, 1fr)- Название (гибкое, но не распирает)
-       550px         - Аналитика (фиксировано)
-       minmax(0, 0.8fr)- Жанры (гибкое)
-       60px          - Год
-       60px          - Стр.
-       120px         - Статус
-       50px          - Кнопка
+       Точная настройка 9 колонок (сумма должна быть стабильной):
+       60px   - Рейтинг
+       1fr    - Название (гибкое)
+       480px  - Аналитика (ужали на 20px для GR)
+       0.7fr  - Жанры (чуть меньше приоритет)
+       50px   - GR
+       55px   - Год
+       55px   - Стр.
+       100px  - Статус
+       50px   - Опс (иконка)
     */
-    grid-template-columns: 60px minmax(0, 1fr) 550px minmax(0, 0.8fr) 60px 60px 120px 50px;
+    grid-template-columns: 60px minmax(0, 1fr) 480px minmax(0, 0.7fr) 50px 55px 55px 100px 50px;
     align-items: center; 
-    gap: 20px;
+    gap: 15px;
 }
 .list-header { padding: 0 24px; margin-bottom: 10px; color: var(--text-muted); font-size: 0.7rem; font-weight: 800; text-transform: uppercase; }
+
+/* Уменьшим немного шрифт в матрице аналитики, чтобы она была компактнее */
+.matrix-value { font-size: 0.85rem; }
+.matrix-label { font-size: 0.6rem; }
+
 
 /* Защита от "ступенек": если текст слишком длинный, он превратится в многоточие */
 .row-title, .row-author {
@@ -106,7 +112,7 @@ body {
 }
 
 .row-title-block {
-    min-width: 0; /* Важно для работы text-overflow внутри грида */
+    min-width: 0; /* Позволяет дочерним элементам сжиматься */
     display: flex;
     flex-direction: column;
 }
@@ -162,7 +168,14 @@ body {
 .footer-inner { max-width: 1550px; margin: 0 auto; padding: 0 24px; display: flex; justify-content: space-between; align-items: center; opacity: 0.6; }
 
 .row-title { font-weight: 800; font-size: 1.15rem; }
-.row-author { font-size: 0.9rem; opacity: 0.7; }
+.row-author {
+    font-size: 0.85rem;
+    opacity: 0.8;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 180px; /* Ограничим ширину имени автора, чтобы страна всегда была видна */
+}
 .status-pill.dynamic-pill { background: rgba(0,0,0,0.08) !important; padding: 4px 10px; border-radius: 8px; font-size: 0.7rem; font-weight: 800; text-transform: uppercase; }
 
 /* Кнопка страницы */
@@ -180,4 +193,61 @@ body {
     color: #ffffff !important;
     border-color: var(--primary) !important;
     box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3); /* Добавим легкое свечение для красоты */
+}
+
+/* Эффект пульсации для кнопок во время запроса HTMX */
+.htmx-request {
+    opacity: 0.6;
+    pointer-events: none;
+    filter: grayscale(1);
+}
+
+
+.filter-select {
+    appearance: none; /* Убираем стандартную стрелочку */
+    background-color: #f8fafc;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 10px 35px 10px 15px;
+    font-family: inherit;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-dark);
+    cursor: pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    background-size: 16px;
+    transition: all 0.2s;
+}
+
+.filter-select:hover {
+    border-color: var(--primary);
+    background-color: #ffffff;
+}
+
+.filter-select:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+/* Компактная кнопка сброса */
+.btn-reset {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    text-decoration: none;
+    transition: 0.2s;
+}
+
+.btn-reset:hover {
+    background: #fee2e2;
+    color: #ef4444;
+    border-color: #fca5a5;
 }

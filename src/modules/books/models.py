@@ -29,6 +29,7 @@ class Book(SQLModel, table=True):
     series: str | None = None
     format: str
     language: str
+    good_reads: int | None = Field(default=None)
     
     # Даты начала и конца чтения
     started: str | None = None

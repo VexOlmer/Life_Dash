@@ -504,12 +504,14 @@ setup_logger()
 """Модели данных для модуля книг."""
 
 import re
+from datetime import datetime
 from typing import Any
 
 from pydantic import ConfigDict, field_validator
 from sqlmodel import Field, SQLModel
 
 from src.common.utils import translate
+from src.core.logger import logger
 
 
 class Book(SQLModel, table=True):
@@ -530,6 +532,7 @@ class Book(SQLModel, table=True):
     series: str | None = None
     format: str
     language: str
+    good_reads: int | None = Field(default=None)
     
     # Даты начала и конца чтения
     started: str | None = None
@@ -752,6 +755,58 @@ class Book(SQLModel, table=True):
             {"label": translate(k), "value": getattr(self, k), "percent": getattr(self, k) * 10}
             for k in keys
         ]
+        
+    @property
+    def reading_sessions(self) -> list[dict[str, Any]]:
+        """
+            Парсит периоды чтения в формате dd.mm.yyyy, mm.yyyy или yyyy. Разделитель сессий — символ '|'.
+            
+            Returns:
+                list[dict[str, Any]] - Список сессий чтения конкретной книги.
+        """
+        
+        if not self.started:
+            return []
+
+        # 1. Разбиваем строки на списки
+        starts = [s.strip() for s in str(self.started).split("|")]
+        finishes = [f.strip() for f in str(self.finished or "").split("|")]
+        
+        # 2. Выравниваем списки (чтобы для каждого старта был финиш, пусть и пустой)
+        while len(finishes) < len(starts):
+            finishes.append("")
+
+        sessions = []
+        logger.debug(f"Начало сессий - {starts}\n;Концы сессий - {finishes}")
+        
+        for i, (s_raw, f_raw) in enumerate(zip(starts, finishes, strict=True), 1):
+            session = {
+                "number": i,
+                "start": s_raw or "?",
+                "finish": f_raw or "в процессе",
+                "days": None,
+                "pages_per_day": None
+            }
+            logger.debug(f"Начало - {s_raw}, Конец - {f_raw}")
+
+            # 3. Пытаемся считать дни только если ОБЕ даты полные (dd.mm.yyyy = 10 знаков)
+            if len(s_raw) == 10 and len(f_raw) == 10:
+                try:
+                    # Указываем формат дня через точку
+                    d1 = datetime.strptime(s_raw, "%d.%m.%Y")
+                    d2 = datetime.strptime(f_raw, "%d.%m.%Y")
+                    
+                    delta = (d2 - d1).days + 1
+                    if delta > 0:
+                        session["days"] = delta
+                        session["pages_per_day"] = round(self.total / delta, 1)
+                except ValueError as e:
+                    logger.error(f"Формат даты при парсинге сессий чтений не подошел - {e}")
+                    pass
+            
+            sessions.append(session)
+            
+        return sessions
 ```
 
 ---
@@ -786,7 +841,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
-from sqlmodel import Session, func, select
+from sqlmodel import Session, func, or_, select
 
 from src.core.database import get_session
 from src.parser.sync import sync_books
@@ -806,7 +861,8 @@ async def list_books(
     sort: str = "total_rating",
     order: str = "desc",
     page: int = 1,
-    size: int = 20
+    size: int = 20,
+    q: str | None = None
 ) -> HTMLResponse:
     """
         Список книг с пагинацией и сортировкой.
@@ -818,18 +874,30 @@ async def list_books(
             order: Тип сортировки (по возрастанию/убыванию).
             page: Первоначальная страница.
             size: Кол-во документов на странице.
+            q: Данные в поисковой строке.
         
         Returns:
             HTMLResponse: Обновленный шаблон страницы.
     """
     
-    # 1. Считаем общее количество книг
-    total_count = session.exec(select(func.count()).select_from(Book)).one()
-    
-    # 2. Рассчитываем общее количество страниц
+    # 1. Формируем базовый запрос
+    statement = select(Book)
+    count_statement = select(func.count()).select_from(Book)
+
+    # 2. Если есть поисковый запрос, фильтруем по названию или автору
+    if q:
+        filter_condition = or_(
+            Book.title.icontains(q), 
+            Book.author.icontains(q),
+            Book.series.icontains(q)
+        )
+        statement = statement.where(filter_condition)
+        count_statement = count_statement.where(filter_condition)
+
+    # 3. Считаем общее количество с учетом фильтра
+    total_count = session.exec(count_statement).one()
     total_pages = (total_count + size - 1) // size
-    
-    # 3. Защита от выхода за границы
+
     if page < 1:
         page = 1
     if page > total_pages and total_pages > 0:
@@ -846,7 +914,7 @@ async def list_books(
     
     # 6. Запрос с лимитом и смещением (LIMIT / OFFSET)
     offset = (page - 1) * size
-    statement = select(Book).order_by(expression).offset(offset).limit(size)
+    statement = statement.order_by(expression).offset(offset).limit(size)
     books = session.exec(statement).all()
     
     # 7. Номера книг, показанных на текущей странице
@@ -858,6 +926,7 @@ async def list_books(
         "total_rating": "Общий рейтинг",
         "total": "Количество страниц",
         "year": "Год издания",
+        "good_reads": "GoodReads",
         "rating_characters": "Герои",
         "rating_plot": "Сюжет",
         "rating_size": "Объем",
@@ -878,6 +947,7 @@ async def list_books(
             "current_sort": sort,
             "current_order": order,
             "current_page": page,
+            "current_search": q or "",
             "total_pages": total_pages,
             "page_numbers": page_numbers,
             "showing_from": showing_from,
@@ -889,9 +959,13 @@ async def list_books(
     )
 
 @router.post("/sync")
-async def sync_books_endpoint(request: Request, session: SessionDep) -> HTMLResponse:
+async def sync_books_endpoint(
+    request: Request, 
+    session: SessionDep, 
+    force: bool = False
+) -> HTMLResponse:
     """Запускает синхронизацию книг."""
-    stats = sync_books(session)
+    stats = sync_books(session, force=force)
     return templates.TemplateResponse(
         "components/sync_report.html", 
         {"request": request, "stats": stats}
@@ -1033,6 +1107,7 @@ class BookTransformer:
             series=meta.get("series"),
             format=meta.get("format"),
             language=meta.get("language"),
+            good_reads=meta.get("good_reads"),
             started=str(meta.get("started", "")) if meta.get("started") else None,
             finished=str(meta.get("finished", "")) if meta.get("finished") else None,
             bg_color=str(meta.get("bg_color", "#ffffff")),
@@ -1126,7 +1201,7 @@ from src.web.router import stats_cache
 from .engine import ScannerEngine
 
 
-def sync_books(session: Session) -> dict[str, Any]:
+def sync_books(session: Session, force: bool = False) -> dict[str, Any]:
     """
         Синхронизация заметок из базы знаний с БД.
     
@@ -1134,7 +1209,8 @@ def sync_books(session: Session) -> dict[str, Any]:
         Если обработка заметки завершилась ошибкой, она не будет добавлена в БД.
         
         Args:
-            session: Текущая сессия
+            session: Текущая сессия.
+            force: Флаг принудительного обновления данных в БД.
             
         Returns:
             dict[str, Any] - Словарь статистики статусов синхронизации файлов
@@ -1178,7 +1254,7 @@ def sync_books(session: Session) -> dict[str, Any]:
         # 1. Попытка поиска (может упасть, если прошлая итерация не сделала rollback)
         try:
             db_item = repo.get_by_path(rel_path)
-            if db_item and db_item.last_modified >= mtime:
+            if not force and db_item and db_item.last_modified >= mtime:
                 logger.debug(f"Пропуск (не менялся): {rel_path}")
                 continue
         except Exception as e:
@@ -1239,6 +1315,7 @@ from fastapi.templating import Jinja2Templates
 from sqlmodel import Session, func, select
 
 from src.core.database import get_session
+from src.core.logger import logger
 from src.modules.books.models import Book
 
 
@@ -1268,11 +1345,12 @@ SessionDep = Annotated[Session, Depends(get_session)]
 
 @router.get("/", response_class=HTMLResponse)
 async def index(request: Request, session: SessionDep) -> HTMLResponse:
-    """Подсчитывание статистики книг (с кэшированием)."""
+    """Подсчитывание общей статистики для главной страницы."""
     
     # Проверяем наличие данных в кэше
     cached_stats = stats_cache.get()
     if cached_stats:
+        logger.debug("Статистика взята из кеша.")
         return templates.TemplateResponse(
             "pages/index.html", {"request": request, "stats": cached_stats}
         )
@@ -1293,6 +1371,7 @@ async def index(request: Request, session: SessionDep) -> HTMLResponse:
             "reading": reading_books
         }
     }
+    logger.debug(f"Обновленная статистика - {new_stats}")
     
     # Обновляем кеш
     stats_cache.set(new_stats)
@@ -1388,10 +1467,42 @@ body {
 .books-list { display: flex; flex-direction: column; gap: 10px; }
 .list-header, .book-row {
     display: grid;
-    grid-template-columns: 60px 1.5fr 550px 1fr 80px 120px 60px;
-    align-items: center; gap: 20px;
+    /* 
+       Точная настройка 9 колонок (сумма должна быть стабильной):
+       60px   - Рейтинг
+       1fr    - Название (гибкое)
+       480px  - Аналитика (ужали на 20px для GR)
+       0.7fr  - Жанры (чуть меньше приоритет)
+       50px   - GR
+       55px   - Год
+       55px   - Стр.
+       100px  - Статус
+       50px   - Опс (иконка)
+    */
+    grid-template-columns: 60px minmax(0, 1fr) 480px minmax(0, 0.7fr) 50px 55px 55px 100px 50px;
+    align-items: center; 
+    gap: 15px;
 }
 .list-header { padding: 0 24px; margin-bottom: 10px; color: var(--text-muted); font-size: 0.7rem; font-weight: 800; text-transform: uppercase; }
+
+/* Уменьшим немного шрифт в матрице аналитики, чтобы она была компактнее */
+.matrix-value { font-size: 0.85rem; }
+.matrix-label { font-size: 0.6rem; }
+
+
+/* Защита от "ступенек": если текст слишком длинный, он превратится в многоточие */
+.row-title, .row-author {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block;
+}
+
+.row-title-block {
+    min-width: 0; /* Позволяет дочерним элементам сжиматься */
+    display: flex;
+    flex-direction: column;
+}
 
 .book-row {
     background: white; border-radius: 20px; padding: 12px 24px;
@@ -1444,7 +1555,14 @@ body {
 .footer-inner { max-width: 1550px; margin: 0 auto; padding: 0 24px; display: flex; justify-content: space-between; align-items: center; opacity: 0.6; }
 
 .row-title { font-weight: 800; font-size: 1.15rem; }
-.row-author { font-size: 0.9rem; opacity: 0.7; }
+.row-author {
+    font-size: 0.85rem;
+    opacity: 0.8;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 180px; /* Ограничим ширину имени автора, чтобы страна всегда была видна */
+}
 .status-pill.dynamic-pill { background: rgba(0,0,0,0.08) !important; padding: 4px 10px; border-radius: 8px; font-size: 0.7rem; font-weight: 800; text-transform: uppercase; }
 
 /* Кнопка страницы */
@@ -1462,6 +1580,13 @@ body {
     color: #ffffff !important;
     border-color: var(--primary) !important;
     box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3); /* Добавим легкое свечение для красоты */
+}
+
+/* Эффект пульсации для кнопок во время запроса HTMX */
+.htmx-request {
+    opacity: 0.6;
+    pointer-events: none;
+    filter: grayscale(1);
 }
 ```
 
@@ -1571,6 +1696,35 @@ body {
 {% block content %}
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
     <h1 style="font-size: 3rem; font-weight: 800; margin: 0; letter-spacing: -2px;">Библиотека</h1>
+
+    <!-- ФОРМА ПОИСКА -->
+    <form method="get" action="/books/" style="position: relative; flex: 1; max-width: 400px;">
+        <input type="text" name="q" value="{{ current_search }}"
+               hx-get="/books/" 
+                hx-trigger="keyup changed delay:500ms" 
+                hx-target=".books-list" 
+                hx-select=".books-list"
+               placeholder="Поиск по названию, автору или серии..." 
+               style="
+                    width: 100%;
+                    padding: 10px 15px 10px 40px;
+                    border-radius: 12px;
+                    border: 1px solid var(--border);
+                    font-family: inherit;
+                    font-size: 0.9rem;
+                    outline: none;
+                    transition: var(--transition);
+               "
+               onfocus="this.style.borderColor='var(--primary)';"
+               onblur="this.style.borderColor='var(--border)';"
+        >
+        <!-- Иконка лупы -->
+        <span style="position: absolute; left: 15px; top: 50%; transform: translateY(-50%); opacity: 0.4;">🔍</span>
+        
+        <!-- Сохраняем сортировку при поиске -->
+        <input type="hidden" name="sort" value="{{ current_sort }}">
+        <input type="hidden" name="order" value="{{ current_order }}">
+    </form>
     
     <div style="display: flex; gap: 10px; align-items: center;">
         <div class="dropdown">
@@ -1594,9 +1748,20 @@ body {
             {{ '↓' if current_order == 'desc' else '↑' }}
         </a>
 
-        <!-- Убрали btn-large, теперь кнопка стандартного размера -->
-        <button class="btn-primary" hx-post="/books/sync" hx-target="#sync-report">
+        <!-- Кнопнка обычной синхронизации -->
+        <button class="btn-primary" style="padding: 10px 16px; font-size: 0.9rem;" 
+                hx-post="/books/sync" hx-target="#sync-report">
             <span>🔄</span> Синхронизировать
+        </button>
+
+        <!-- Кнопка принудительного полного обновления -->
+        <button class="order-toggle" 
+                style="width: 45px; font-size: 0.9rem;" 
+                hx-post="/books/sync?force=true" 
+                hx-target="#sync-report"
+                hx-confirm="Перечитать ВСЕ файлы заметок заново?"
+                title="Полное обновление">
+            ⚡
         </button>
     </div>
 </div>
@@ -1606,9 +1771,11 @@ body {
 <div class="books-list">
     <div class="list-header">
         <span>Рейт.</span>
-        <span>Название и автор</span>
+        <span>Название</span>
         <span style="text-align: center;">Аналитика</span>
         <span>Жанры</span>
+        <span style="text-align: right;">GR</span>
+        <span style="text-align: right;">Год</span>
         <span style="text-align: right;">Стр.</span>
         <span style="text-align: center;">Статус</span>
         <span></span>
@@ -1620,8 +1787,28 @@ body {
         <div class="row-anchor">{{ book.total_rating|int }}</div>
 
         <div class="row-title-block">
+            <!-- Название книги -->
             <span class="row-title">{{ book.title }}</span>
-            <span class="row-author">{{ book.author }}</span>
+            
+            <!-- Блок автора и страны -->
+            <div style="display: flex; align-items: center; gap: 8px; margin-top: 2px;">
+                <span class="row-author">{{ book.author }}</span>
+                
+                {% if book.country_author and book.country_author != "Unknown" %}
+                <span style="
+                    font-size: 0.65rem; 
+                    font-weight: 800; 
+                    text-transform: uppercase; 
+                    padding: 1px 6px; 
+                    background: rgba(0,0,0,0.1); 
+                    border-radius: 4px; 
+                    opacity: 0.8;
+                    letter-spacing: 0.5px;
+                ">
+                    {{ book.country_author }}
+                </span>
+                {% endif %}
+            </div>
         </div>
 
         <div class="rating-matrix">
@@ -1648,8 +1835,15 @@ body {
             {% endfor %}
         </div>
 
-        <div class="row-meta" style="text-align: right;"><strong>{{ book.total }}</strong></div>
-        <div style="display: flex; justify-content: center;"><span class="status-pill dynamic-pill">{{ book.status_ru }}</span></div>
+        <div style="text-align: right; font-weight: 800; opacity: 0.9;">
+            {{ book.good_reads if book.good_reads else "—" }}
+        </div>
+
+        <div style="text-align: right; font-size: 0.95rem; font-weight: 700;">
+            {{ book.year }}
+        </div>
+        <div class="row-meta" style="text-align: right;"><strong> {{ book.total }} </strong></div>
+        <div style="display: flex; justify-content: center;"><span class="status-pill dynamic-pill"> {{ book.status_ru }} </span></div>
 
         <div style="display: flex; justify-content: flex-end;">
             <object>
@@ -1731,6 +1925,14 @@ body {
         <div style="background-color: {{ book.bg_color }}; color: {{ book.text_color }}; padding: 4rem 3rem;">
             <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                 <div style="flex: 1;">
+                    <!-- СЕРИЯ КНИГ (если есть) -->
+                    {% if book.series %}
+                    <div style="font-size: 0.8rem; font-weight: 800; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 0.5rem; opacity: 0.7;">
+                        Серия: {{ book.series }}
+                    </div>
+                    {% endif %}
+
+                    <!-- Жанры -->
                     <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 1.5rem;">
                         {% for genre in book.detailed_genres_list_ru %}
                             <div style="background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.2); padding: 4px 12px; border-radius: 8px; display: flex; align-items: center; gap: 8px; backdrop-filter: blur(4px);">
@@ -1746,14 +1948,50 @@ body {
                         {% endfor %}
                     </div>
 
+                    <!-- Название и Автор -->
                     <h1 style="font-size: 3.5rem; margin: 0; letter-spacing: -2px; line-height: 1.1;">{{ book.title }}</h1>
-                    <p style="font-size: 1.5rem; opacity: 0.9; margin-top: 0.5rem;">{{ book.author }}, {{ book.year }}</p>
+                    <p style="font-size: 1.5rem; opacity: 0.9; margin-top: 0.5rem;">
+                        {{ book.author }}, 
+                        {{ book.year }}
+                    </p>
                 </div>
                 
-                <div style="text-align: right; margin-left: 2rem;">
-                    <div style="font-size: 4.5rem; font-weight: 900; line-height: 1;">{{ book.total_rating|int }}</div>
-                    <div style="text-transform: uppercase; font-size: 0.7rem; font-weight: 800; opacity: 0.7; letter-spacing: 1px;">Rating Score</div>
-                </div>
+<!-- ПРАВАЯ ЧАСТЬ: РЕЙТИНГИ -->
+<div style="text-align: right; margin-left: 2rem; display: flex; flex-direction: column; align-items: flex-end; gap: 1.2rem;">
+    
+    <!-- Твой личный рейтинг (Компактный акцент) -->
+    <div style="
+        background: rgba(255,255,255,0.12); 
+        padding: 15px 25px; 
+        border-radius: 20px; 
+        border: 1px solid rgba(255,255,255,0.2);
+        backdrop-filter: blur(8px);
+        text-align: center;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    ">
+        <div style="font-size: 3.2rem; font-weight: 900; line-height: 1;">{{ book.total_rating|int }}</div>
+        <div style="
+            text-transform: uppercase; 
+            font-size: 0.6rem; 
+            font-weight: 800; 
+            opacity: 0.8; 
+            letter-spacing: 1px;
+            margin-top: 4px;
+        ">My Score</div>
+    </div>
+
+    <!-- Рейтинг GoodReads (Минималистичный) -->
+    <div style="text-align: center; padding-right: 10px; opacity: 0.7;">
+        <div style="font-size: 1.5rem; font-weight: 900; line-height: 1;">{{ book.good_reads or '—' }}</div>
+        <div style="
+            text-transform: uppercase; 
+            font-size: 0.5rem; 
+            font-weight: 800; 
+            letter-spacing: 1px; 
+            margin-top: 2px;
+        ">GoodReads</div>
+    </div>
+</div>
             </div>
         </div>
 
@@ -1766,12 +2004,77 @@ body {
                         <li style="margin-bottom: 5px;"><strong>Статус:</strong> {{ book.status_ru }}</li>
                         <li style="margin-bottom: 5px;"><strong>Формат:</strong> {{ book.format_ru }}</li>
                         <li style="margin-bottom: 5px;"><strong>Язык:</strong> {{ book.language }}</li>
+                        <li style="margin-bottom: 5px;"><strong>Страна:</strong> {{ book.country_author }}</li>
+                        {% if book.series %}
+                        <li style="margin-bottom: 5px;"><strong>Серия:</strong> {{ book.series }}</li>
+                        {% endif %}
+                        {% if book.isbn %}
+                        <li style="margin-bottom: 5px;"><strong>ISBN:</strong> {{ book.isbn }}</li>
+                        {% endif %}
                     </ul>
                 </div>
                 <div>
                     <h4 style="margin: 0; color: #a4b0be; text-transform: uppercase; font-size: 0.75rem; font-weight: 800; letter-spacing: 1px;">Объем</h4>
                     <p style="font-size: 1.25rem; margin: 1rem 0 0.5rem 0;"><strong>{{ book.total }}</strong> страниц</p>
-                    <small style="color: var(--text-muted);">Период: {{ book.started or '?' }} — {{ book.finished or '?' }}</small>
+                </div>
+            </div>
+
+            <!-- Секция периодов чтения -->
+            <div style="margin-bottom: 3rem;">
+                <h2 style="font-size: 1.5rem; letter-spacing: -0.5px; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 10px;">
+                    <span>⏳</span> История чтения и темп
+                </h2>
+
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem;">
+                    {% for session in book.reading_sessions %}
+                    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 16px; padding: 1.5rem; position: relative; overflow: hidden;">
+                        
+                        <!-- Номер сессии на фоне -->
+                        <div style="position: absolute; right: 15px; top: 5px; font-size: 5rem; font-weight: 900; color: rgba(0,0,0,0.03); z-index: 0; pointer-events: none;">
+                            {{ session.number }}
+                        </div>
+
+                        <div style="position: relative; z-index: 1;">
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 1rem;">
+                                <span style="font-size: 0.7rem; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8;">Сессия {{ session.number }}</span>
+                                {% if session.finish == "в процессе" %}
+                                    <span style="background: {{ book.bg_color }}; color: {{ book.text_color }}; padding: 2px 8px; border-radius: 4px; font-size: 0.65rem; font-weight: 800;">ЧИТАЮ</span>
+                                {% endif %}
+                            </div>
+
+                            <div style="display: flex; gap: 15px; align-items: center; margin-bottom: 1rem;">
+                                <div>
+                                    <div style="font-size: 0.95rem; font-weight: 700;">{{ session.start }}</div>
+                                    <div style="font-size: 0.65rem; color: #94a3b8; text-transform: uppercase;">Начало</div>
+                                </div>
+                                <div style="color: #cbd5e1;">→</div>
+                                <div>
+                                    <div style="font-size: 0.95rem; font-weight: 700; {% if session.finish == 'в процессе' %}color: var(--primary);{% endif %}">
+                                        {{ session.finish }}
+                                    </div>
+                                    <div style="font-size: 0.65rem; color: #94a3b8; text-transform: uppercase;">Конец</div>
+                                </div>
+                            </div>
+
+                            {% if session.days %}
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding-top: 1rem; border-top: 1px dashed #e2e8f0;">
+                                <div>
+                                    <div style="font-size: 1.2rem; font-weight: 800; color: var(--primary);">{{ session.days }}</div>
+                                    <div style="font-size: 0.65rem; color: #94a3b8; font-weight: 700; text-transform: uppercase;">Дней</div>
+                                </div>
+                                <div>
+                                    <div style="font-size: 1.2rem; font-weight: 800; color: #10b981;">{{ session.pages_per_day }}</div>
+                                    <div style="font-size: 0.65rem; color: #94a3b8; font-weight: 700; text-transform: uppercase;">Стр/День</div>
+                                </div>
+                            </div>
+                            {% else %}
+                            <div style="font-size: 0.75rem; color: #cbd5e1; font-style: italic; padding-top: 1rem; border-top: 1px dashed #e2e8f0;">
+                                Аналитика темпа недоступна
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
                 </div>
             </div>
 

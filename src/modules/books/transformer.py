@@ -52,6 +52,7 @@ class BookTransformer:
             series=meta.get("series"),
             format=meta.get("format"),
             language=meta.get("language"),
+            good_reads=meta.get("good_reads"),
             started=str(meta.get("started", "")) if meta.get("started") else None,
             finished=str(meta.get("finished", "")) if meta.get("finished") else None,
             bg_color=str(meta.get("bg_color", "#ffffff")),

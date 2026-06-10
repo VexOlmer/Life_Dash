@@ -1,150 +1,281 @@
 {% extends "layout.html" %}
 
 {% block content %}
-<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
-    <h1 style="font-size: 3rem; font-weight: 800; margin: 0; letter-spacing: -2px;">Библиотека</h1>
-    
-    <div style="display: flex; gap: 10px; align-items: center;">
-        <div class="dropdown">
-            <button class="sort-trigger">
-                <span>📊 Сортировка:</span>
-                <strong>{{ sort_label }}</strong>
-                <span style="font-size: 0.6rem; margin-left: 5px;">▼</span>
-            </button>
-            <div class="dropdown-content">
-                {% for key, label in labels.items() %}
-                <a href="?sort={{ key }}&order={{ current_order }}&page=1" class="{{ 'active' if current_sort == key }}">
-                    {{ label }}
-                </a>
-                {% endfor %}
-            </div>
-        </div>
+<div id="library-container">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+        <h1 style="font-size: 3rem; font-weight: 800; margin: 0; letter-spacing: -2px;">Библиотека</h1>
 
-        {% set next_order = 'asc' if current_order == 'desc' else 'desc' %}
-        <!-- Кнопка направления теперь имеет класс order-toggle для рамки -->
-        <a href="?sort={{ current_sort }}&order={{ next_order }}" class="order-toggle" title="Изменить направление">
-            {{ '↓' if current_order == 'desc' else '↑' }}
+        <!-- ФОРМА ПОИСКА -->
+        <form method="get" action="/books/" style="position: relative; flex: 1; max-width: 400px;">
+            <input type="text" name="q" value="{{ current_search }}"
+                hx-get="/books/" 
+                    hx-trigger="keyup changed delay:500ms" 
+                    hx-target=".books-list" 
+                    hx-select=".books-list"
+                placeholder="Поиск по названию, автору или серии..." 
+                style="
+                        width: 100%;
+                        padding: 10px 15px 10px 40px;
+                        border-radius: 12px;
+                        border: 1px solid var(--border);
+                        font-family: inherit;
+                        font-size: 0.9rem;
+                        outline: none;
+                        transition: var(--transition);
+                "
+                onfocus="this.style.borderColor='var(--primary)';"
+                onblur="this.style.borderColor='var(--border)';"
+            >
+            <!-- Иконка лупы -->
+            <span style="position: absolute; left: 15px; top: 50%; transform: translateY(-50%); opacity: 0.4;">🔍</span>
+            
+            <!-- Сохраняем сортировку при поиске -->
+            <input type="hidden" name="sort" value="{{ current_sort }}">
+            <input type="hidden" name="order" value="{{ current_order }}">
+        </form>
+        
+        <div style="display: flex; gap: 10px; align-items: center;">
+            <div class="dropdown">
+                <button class="sort-trigger">
+                    <span>📊 Сортировка:</span>
+                    <strong>{{ sort_label }}</strong>
+                    <span style="font-size: 0.6rem; margin-left: 5px;">▼</span>
+                </button>
+                <div class="dropdown-content">
+                    {% for key, label in labels.items() %}
+                    <a href="?sort={{ key }}&order={{ current_order }}&page=1&status={{ current_status }}&genre={{ current_genre }}&country={{ current_country }}&book_format={{ current_format }}&q={{ current_search }}" 
+                    class="{{ 'active' if current_sort == key }}">
+                        {{ label }}
+                    </a>
+                    {% endfor %}
+                </div>
+            </div>
+
+            {% set next_order = 'asc' if current_order == 'desc' else 'desc' %}
+            <a href="?sort={{ current_sort }}&order={{ next_order }}&page=1&status={{ current_status }}&genre={{ current_genre }}&country={{ current_country }}&book_format={{ current_format }}&q={{ current_search }}" 
+            class="order-toggle" title="Изменить направление">
+                {{ '↓' if current_order == 'desc' else '↑' }}
+            </a>
+
+            <!-- Кнопнка обычной синхронизации -->
+            <button class="btn-primary" style="padding: 10px 16px; font-size: 0.9rem;" 
+                    hx-post="/books/sync" hx-target="#sync-report">
+                <span>🔄</span> Синхронизировать
+            </button>
+
+            <!-- Кнопка принудительного полного обновления -->
+            <button class="order-toggle" 
+                    style="width: 45px; font-size: 0.9rem;" 
+                    hx-post="/books/sync?force=true" 
+                    hx-target="#sync-report"
+                    hx-confirm="Перечитать ВСЕ файлы заметок заново?"
+                    title="Полное обновление">
+                ⚡
+            </button>
+        </div>
+    </div>
+
+    <!-- ПАНЕЛЬ ФИЛЬТРОВ -->
+    <form method="get" action="/books/" 
+          hx-get="/books/" 
+          hx-target="#library-container" 
+          hx-select="#library-container"
+          hx-trigger="change from:select"
+          hx-push-url="true"
+          style="display: flex; align-items: center; gap: 12px; background: white; padding: 12px 20px; border-radius: 20px; margin-bottom: 2rem; border: 1px solid var(--border); box-shadow: var(--shadow);">
+        
+        <div style="font-size: 1.2rem; margin-right: 5px;">🔍</div>
+
+        <!-- Статус -->
+        <select name="status" class="filter-select">
+            <option value="">Все статусы</option>
+            {% for s in all_statuses %}
+            <option value="{{ s.id }}" {{ 'selected' if current_status == s.id }}>{{ s.label }}</option>
+            {% endfor %}
+        </select>
+
+        <!-- Жанр -->
+        <select name="genre" class="filter-select">
+            <option value="">Все жанры</option>
+            {% for g in all_genres %}
+            <option value="{{ g.id }}" {{ 'selected' if current_genre == g.id }}>{{ g.label }}</option>
+            {% endfor %}
+        </select>
+
+        <!-- Страна -->
+        <select name="country" class="filter-select">
+            <option value="">Все страны</option>
+            {% for c in all_countries %}
+            <option value="{{ c }}" {{ 'selected' if current_country == c }}>{{ c }}</option>
+            {% endfor %}
+        </select>
+
+        <!-- Формат -->
+        <select name="book_format" class="filter-select">
+            <option value="">Все форматы</option>
+            {% for f in all_formats %}
+            <option value="{{ f.id }}" {{ 'selected' if current_format == f.id }}>{{ f.label }}</option>
+            {% endfor %}
+        </select>
+
+        <!-- Кнопка сброса (уменьшенная) -->
+        <a href="/books/" class="btn-reset" title="Сбросить все фильтры">
+            <span style="font-size: 1.2rem; font-weight: bold;">&times;</span>
         </a>
 
-        <!-- Убрали btn-large, теперь кнопка стандартного размера -->
-        <button class="btn-primary" hx-post="/books/sync" hx-target="#sync-report">
-            <span>🔄</span> Синхронизировать
-        </button>
-    </div>
-</div>
+        <!-- Скрытые поля -->
+        <input type="hidden" name="q" value="{{ current_search }}">
+        <input type="hidden" name="sort" value="{{ current_sort }}">
+        <input type="hidden" name="order" value="{{ current_order }}">
+    </form>
 
-<div id="sync-report"></div>
 
-<div class="books-list">
-    <div class="list-header">
-        <span>Рейт.</span>
-        <span>Название</span>
-        <span style="text-align: center;">Аналитика</span>
-        <span>Жанры</span>
-        <span style="text-align: right;">Год</span>
-        <span style="text-align: right;">Стр.</span>
-        <span style="text-align: center;">Статус</span>
-        <span></span>
-    </div>
+    <div id="sync-report"></div>
 
-    {% for book in books %}
-    <a href="/books/{{ book.id }}" class="book-row" style="background-color: {{ book.bg_color }}; color: {{ book.text_color }};">
-        
-        <div class="row-anchor">{{ book.total_rating|int }}</div>
-
-        <div class="row-title-block">
-            <span class="row-title">{{ book.title }}</span>
-            <span class="row-author">{{ book.author }}</span>
+    <div class="books-list">
+        <div class="list-header">
+            <span>Рейт.</span>
+            <span>Название</span>
+            <span style="text-align: center;">Аналитика</span>
+            <span>Жанры</span>
+            <span style="text-align: right;">GR</span>
+            <span style="text-align: right;">Год</span>
+            <span style="text-align: right;">Стр.</span>
+            <span style="text-align: center;">Статус</span>
+            <span></span>
         </div>
 
-        <div class="rating-matrix">
-            {% set ratings_data = [
-                ('Герои', book.rating_characters), ('Сюжет', book.rating_plot), 
-                ('Объем', book.rating_size), ('Слог', book.rating_prose),
-                ('Финал', book.rating_ending), ('Глуб', book.rating_depth),
-                ('Атм', book.rating_atmosphere), ('Повт', book.rating_rereadability),
-                ('Ожид', book.rating_expected_real), ('Рек', book.rating_recommend)
-            ] %}
-            {% for label, val in ratings_data %}
-            <div class="matrix-cell">
-                <span class="matrix-label">{{ label }}</span>
-                <span class="matrix-value">{{ val|round(1) }}</span>
+        {% for book in books %}
+        <a href="/books/{{ book.id }}" class="book-row" style="background-color: {{ book.bg_color }}; color: {{ book.text_color }};">
+            
+            <div class="row-anchor">{{ book.total_rating|int }}</div>
+
+            <div class="row-title-block">
+                <!-- Название книги -->
+                <span class="row-title">{{ book.title }}</span>
+                
+                <!-- Блок автора и страны -->
+                <div style="display: flex; align-items: center; gap: 8px; margin-top: 2px;">
+                    <span class="row-author">{{ book.author }}</span>
+                    
+                    {% if book.country_author and book.country_author != "Unknown" %}
+                    <span style="
+                        font-size: 0.65rem; 
+                        font-weight: 800; 
+                        text-transform: uppercase; 
+                        padding: 1px 6px; 
+                        background: rgba(0,0,0,0.1); 
+                        border-radius: 4px; 
+                        opacity: 0.8;
+                        letter-spacing: 0.5px;
+                    ">
+                        {{ book.country_author }}
+                    </span>
+                    {% endif %}
+                </div>
             </div>
-            {% endfor %}
-        </div>
 
-        <div class="row-genres">
-            {% for genre in book.primary_genres_list_ru %}
-            <div class="list-genre-tag">
-                {{ genre }}
+            <div class="rating-matrix">
+                {% set ratings_data = [
+                    ('Герои', book.rating_characters), ('Сюжет', book.rating_plot), 
+                    ('Объем', book.rating_size), ('Слог', book.rating_prose),
+                    ('Финал', book.rating_ending), ('Глуб', book.rating_depth),
+                    ('Атм', book.rating_atmosphere), ('Повт', book.rating_rereadability),
+                    ('Ожид', book.rating_expected_real), ('Рек', book.rating_recommend)
+                ] %}
+                {% for label, val in ratings_data %}
+                <div class="matrix-cell">
+                    <span class="matrix-label">{{ label }}</span>
+                    <span class="matrix-value">{{ val|round(1) }}</span>
+                </div>
+                {% endfor %}
             </div>
-            {% endfor %}
-        </div>
 
-        <div style="text-align: right; font-size: 0.95rem; font-weight: 700;">
-            {{ book.year }}
-        </div>
-        <div class="row-meta" style="text-align: right;"><strong> {{ book.total }} </strong></div>
-        <div style="display: flex; justify-content: center;"><span class="status-pill dynamic-pill"> {{ book.status_ru }} </span></div>
+            <div class="row-genres">
+                {% for genre in book.primary_genres_list_ru %}
+                <div class="list-genre-tag">
+                    {{ genre }}
+                </div>
+                {% endfor %}
+            </div>
 
-        <div style="display: flex; justify-content: flex-end;">
-            <object>
-                <a href="obsidian://open?vault=Knowledge_Base&file={{ book.file_path | urlencode }}" 
-                   class="row-anchor obsidian-anchor" title="Открыть в Obsidian">
-                   <!-- Вместо эмодзи используем стилизованный символ -->
-                   <span class="obsidian-icon">↗</span>
-                </a>
-            </object>
-        </div>
-    </a>
-    {% endfor %}
+            <div style="text-align: right; font-weight: 800; opacity: 0.9;">
+                {{ book.good_reads if book.good_reads else "—" }}
+            </div>
 
-    <!-- Блок Пагинации -->
-    {% if total_pages > 1 %}
-    <div style="margin-top: 4rem; display: flex; justify-content: center; align-items: center; gap: 0.5rem;">
-        
-        <!-- Первая страница -->
-        {% if current_page > 3 %}
-            <a href="?page=1&sort={{ current_sort }}&order={{ current_order }}" 
-            class="order-toggle" style="width: auto; padding: 0 12px; font-weight: 800;">« 1</a>
-            <span style="color: #cbd5e1; margin: 0 5px;">...</span>
-        {% endif %}
+            <div style="text-align: right; font-size: 0.95rem; font-weight: 700;">
+                {{ book.year }}
+            </div>
+            <div class="row-meta" style="text-align: right;"><strong> {{ book.total }} </strong></div>
+            <div style="display: flex; justify-content: center;"><span class="status-pill dynamic-pill"> {{ book.status_ru }} </span></div>
 
-        <!-- Назад -->
-        {% if current_page > 1 %}
-            <a href="?page={{ current_page - 1 }}&sort={{ current_sort }}&order={{ current_order }}" 
-            class="order-toggle" style="width: auto; padding: 0 15px;">‹</a>
-        {% endif %}
-
-        <!-- Цифры -->
-        {% for p in page_numbers %}
-            <a href="?page={{ p }}&sort={{ current_sort }}&order={{ current_order }}" 
-            class="order-toggle page-button {{ 'active' if p|int == current_page|int else '' }}">
-                {{ p }}
-            </a>
+            <div style="display: flex; justify-content: flex-end;">
+                <object>
+                    <a href="obsidian://open?vault=Knowledge_Base&file={{ book.file_path | urlencode }}" 
+                    class="row-anchor obsidian-anchor" title="Открыть в Obsidian">
+                    <!-- Вместо эмодзи используем стилизованный символ -->
+                    <span class="obsidian-icon">↗</span>
+                    </a>
+                </object>
+            </div>
+        </a>
         {% endfor %}
 
-        <!-- Вперед -->
-        {% if current_page < total_pages %}
-            <a href="?page={{ current_page + 1 }}&sort={{ current_sort }}&order={{ current_order }}" 
-            class="order-toggle" style="width: auto; padding: 0 15px;">›</a>
-        {% endif %}
+        <!-- Блок Пагинации -->
+        {% if total_pages > 1 %}
+        <div style="margin-top: 4rem; display: flex; justify-content: center; align-items: center; gap: 0.5rem;">
+            
+            {# Собираем строку текущих фильтров, чтобы не дублировать код #}
+            {% set filter_params = "&sort=" + current_sort + "&order=" + current_order + "&q=" + current_search + "&status=" + current_status + "&genre=" + current_genre + "&country=" + current_country + "&book_format=" + current_format %}
 
-        <!-- Последняя страница -->
-        {% if current_page < total_pages - 2 %}
-            <span style="color: #cbd5e1; margin: 0 5px;">...</span>
-            <a href="?page={{ total_pages }}&sort={{ current_sort }}&order={{ current_order }}" 
-            class="order-toggle" style="width: auto; padding: 0 12px; font-weight: 800;">{{ total_pages }} »</a>
+            <!-- Первая страница -->
+            {% if current_page > 3 %}
+                <a href="?page=1{{ filter_params }}" 
+                hx-get="?page=1{{ filter_params }}" hx-target="#library-container" hx-select="#library-container" hx-push-url="true"
+                class="order-toggle" style="width: auto; padding: 0 12px; font-weight: 800;">« 1</a>
+                <span style="color: #cbd5e1; margin: 0 5px;">...</span>
+            {% endif %}
+
+            <!-- Назад -->
+            {% if current_page > 1 %}
+                <a href="?page={{ current_page - 1 }}{{ filter_params }}" 
+                hx-get="?page={{ current_page - 1 }}{{ filter_params }}" hx-target="#library-container" hx-select="#library-container" hx-push-url="true"
+                class="order-toggle" style="width: auto; padding: 0 15px;">‹</a>
+            {% endif %}
+
+            <!-- Цифры -->
+            {% for p in page_numbers %}
+                <a href="?page={{ p }}{{ filter_params }}" 
+                hx-get="?page={{ p }}{{ filter_params }}" hx-target="#library-container" hx-select="#library-container" hx-push-url="true"
+                class="order-toggle page-button {{ 'active' if p|int == current_page|int else '' }}">
+                    {{ p }}
+                </a>
+            {% endfor %}
+
+            <!-- Вперед -->
+            {% if current_page < total_pages %}
+                <a href="?page={{ current_page + 1 }}{{ filter_params }}" 
+                hx-get="?page={{ current_page + 1 }}{{ filter_params }}" hx-target="#library-container" hx-select="#library-container" hx-push-url="true"
+                class="order-toggle" style="width: auto; padding: 0 15px;">›</a>
+            {% endif %}
+
+            <!-- Последняя страница -->
+            {% if current_page < total_pages - 2 %}
+                <span style="color: #cbd5e1; margin: 0 5px;">...</span>
+                <a href="?page={{ total_pages }}{{ filter_params }}" 
+                hx-get="?page={{ total_pages }}{{ filter_params }}" hx-target="#library-container" hx-select="#library-container" hx-push-url="true"
+                class="order-toggle" style="width: auto; padding: 0 12px; font-weight: 800;">{{ total_pages }} »</a>
+            {% endif %}
+
+        </div>
+
+        <!-- Текст статистики -->
+        <div style="text-align: center; margin-top: 1.5rem; font-size: 0.75rem; color: #94a3b8; font-weight: 800; text-transform: uppercase; letter-spacing: 1px;">
+            Показано {{ showing_from }}–{{ showing_to }} из {{ total_count }} книг
+        </div>
         {% endif %}
 
     </div>
-
-    <!-- Текст статистики -->
-    <div style="text-align: center; margin-top: 1.5rem; font-size: 0.75rem; color: #94a3b8; font-weight: 800; text-transform: uppercase; letter-spacing: 1px;">
-        Показано {{ showing_from }}–{{ showing_to }} из {{ total_count }} книг
-    </div>
-
-    {% endif %}
 
 </div>
 {% endblock %}

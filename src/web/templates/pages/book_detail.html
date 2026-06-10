@@ -11,6 +11,14 @@
         <div style="background-color: {{ book.bg_color }}; color: {{ book.text_color }}; padding: 4rem 3rem;">
             <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                 <div style="flex: 1;">
+                    <!-- СЕРИЯ КНИГ (если есть) -->
+                    {% if book.series %}
+                    <div style="font-size: 0.8rem; font-weight: 800; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 0.5rem; opacity: 0.7;">
+                        Серия: {{ book.series }}
+                    </div>
+                    {% endif %}
+
+                    <!-- Жанры -->
                     <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 1.5rem;">
                         {% for genre in book.detailed_genres_list_ru %}
                             <div style="background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.2); padding: 4px 12px; border-radius: 8px; display: flex; align-items: center; gap: 8px; backdrop-filter: blur(4px);">
@@ -26,14 +34,50 @@
                         {% endfor %}
                     </div>
 
+                    <!-- Название и Автор -->
                     <h1 style="font-size: 3.5rem; margin: 0; letter-spacing: -2px; line-height: 1.1;">{{ book.title }}</h1>
-                    <p style="font-size: 1.5rem; opacity: 0.9; margin-top: 0.5rem;">{{ book.author }}, {{ book.year }}</p>
+                    <p style="font-size: 1.5rem; opacity: 0.9; margin-top: 0.5rem;">
+                        {{ book.author }}, 
+                        {{ book.year }}
+                    </p>
                 </div>
                 
-                <div style="text-align: right; margin-left: 2rem;">
-                    <div style="font-size: 4.5rem; font-weight: 900; line-height: 1;">{{ book.total_rating|int }}</div>
-                    <div style="text-transform: uppercase; font-size: 0.7rem; font-weight: 800; opacity: 0.7; letter-spacing: 1px;">Rating Score</div>
-                </div>
+<!-- ПРАВАЯ ЧАСТЬ: РЕЙТИНГИ -->
+<div style="text-align: right; margin-left: 2rem; display: flex; flex-direction: column; align-items: flex-end; gap: 1.2rem;">
+    
+    <!-- Твой личный рейтинг (Компактный акцент) -->
+    <div style="
+        background: rgba(255,255,255,0.12); 
+        padding: 15px 25px; 
+        border-radius: 20px; 
+        border: 1px solid rgba(255,255,255,0.2);
+        backdrop-filter: blur(8px);
+        text-align: center;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    ">
+        <div style="font-size: 3.2rem; font-weight: 900; line-height: 1;">{{ book.total_rating|int }}</div>
+        <div style="
+            text-transform: uppercase; 
+            font-size: 0.6rem; 
+            font-weight: 800; 
+            opacity: 0.8; 
+            letter-spacing: 1px;
+            margin-top: 4px;
+        ">My Score</div>
+    </div>
+
+    <!-- Рейтинг GoodReads (Минималистичный) -->
+    <div style="text-align: center; padding-right: 10px; opacity: 0.7;">
+        <div style="font-size: 1.5rem; font-weight: 900; line-height: 1;">{{ book.good_reads or '—' }}</div>
+        <div style="
+            text-transform: uppercase; 
+            font-size: 0.5rem; 
+            font-weight: 800; 
+            letter-spacing: 1px; 
+            margin-top: 2px;
+        ">GoodReads</div>
+    </div>
+</div>
             </div>
         </div>
 
@@ -46,6 +90,13 @@
                         <li style="margin-bottom: 5px;"><strong>Статус:</strong> {{ book.status_ru }}</li>
                         <li style="margin-bottom: 5px;"><strong>Формат:</strong> {{ book.format_ru }}</li>
                         <li style="margin-bottom: 5px;"><strong>Язык:</strong> {{ book.language }}</li>
+                        <li style="margin-bottom: 5px;"><strong>Страна:</strong> {{ book.country_author }}</li>
+                        {% if book.series %}
+                        <li style="margin-bottom: 5px;"><strong>Серия:</strong> {{ book.series }}</li>
+                        {% endif %}
+                        {% if book.isbn %}
+                        <li style="margin-bottom: 5px;"><strong>ISBN:</strong> {{ book.isbn }}</li>
+                        {% endif %}
                     </ul>
                 </div>
                 <div>

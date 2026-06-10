@@ -17,7 +17,7 @@ from src.web.router import stats_cache
 from .engine import ScannerEngine
 
 
-def sync_books(session: Session) -> dict[str, Any]:
+def sync_books(session: Session, force: bool = False) -> dict[str, Any]:
     """
         Синхронизация заметок из базы знаний с БД.
     
@@ -25,7 +25,8 @@ def sync_books(session: Session) -> dict[str, Any]:
         Если обработка заметки завершилась ошибкой, она не будет добавлена в БД.
         
         Args:
-            session: Текущая сессия
+            session: Текущая сессия.
+            force: Флаг принудительного обновления данных в БД.
             
         Returns:
             dict[str, Any] - Словарь статистики статусов синхронизации файлов
@@ -69,7 +70,7 @@ def sync_books(session: Session) -> dict[str, Any]:
         # 1. Попытка поиска (может упасть, если прошлая итерация не сделала rollback)
         try:
             db_item = repo.get_by_path(rel_path)
-            if db_item and db_item.last_modified >= mtime:
+            if not force and db_item and db_item.last_modified >= mtime:
                 logger.debug(f"Пропуск (не менялся): {rel_path}")
                 continue
         except Exception as e:
