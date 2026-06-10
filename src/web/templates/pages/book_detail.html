@@ -51,7 +51,65 @@
                 <div>
                     <h4 style="margin: 0; color: #a4b0be; text-transform: uppercase; font-size: 0.75rem; font-weight: 800; letter-spacing: 1px;">Объем</h4>
                     <p style="font-size: 1.25rem; margin: 1rem 0 0.5rem 0;"><strong>{{ book.total }}</strong> страниц</p>
-                    <small style="color: var(--text-muted);">Период: {{ book.started or '?' }} — {{ book.finished or '?' }}</small>
+                </div>
+            </div>
+
+            <!-- Секция периодов чтения -->
+            <div style="margin-bottom: 3rem;">
+                <h2 style="font-size: 1.5rem; letter-spacing: -0.5px; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 10px;">
+                    <span>⏳</span> История чтения и темп
+                </h2>
+
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem;">
+                    {% for session in book.reading_sessions %}
+                    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 16px; padding: 1.5rem; position: relative; overflow: hidden;">
+                        
+                        <!-- Номер сессии на фоне -->
+                        <div style="position: absolute; right: 15px; top: 5px; font-size: 5rem; font-weight: 900; color: rgba(0,0,0,0.03); z-index: 0; pointer-events: none;">
+                            {{ session.number }}
+                        </div>
+
+                        <div style="position: relative; z-index: 1;">
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 1rem;">
+                                <span style="font-size: 0.7rem; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8;">Сессия {{ session.number }}</span>
+                                {% if session.finish == "в процессе" %}
+                                    <span style="background: {{ book.bg_color }}; color: {{ book.text_color }}; padding: 2px 8px; border-radius: 4px; font-size: 0.65rem; font-weight: 800;">ЧИТАЮ</span>
+                                {% endif %}
+                            </div>
+
+                            <div style="display: flex; gap: 15px; align-items: center; margin-bottom: 1rem;">
+                                <div>
+                                    <div style="font-size: 0.95rem; font-weight: 700;">{{ session.start }}</div>
+                                    <div style="font-size: 0.65rem; color: #94a3b8; text-transform: uppercase;">Начало</div>
+                                </div>
+                                <div style="color: #cbd5e1;">→</div>
+                                <div>
+                                    <div style="font-size: 0.95rem; font-weight: 700; {% if session.finish == 'в процессе' %}color: var(--primary);{% endif %}">
+                                        {{ session.finish }}
+                                    </div>
+                                    <div style="font-size: 0.65rem; color: #94a3b8; text-transform: uppercase;">Конец</div>
+                                </div>
+                            </div>
+
+                            {% if session.days %}
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding-top: 1rem; border-top: 1px dashed #e2e8f0;">
+                                <div>
+                                    <div style="font-size: 1.2rem; font-weight: 800; color: var(--primary);">{{ session.days }}</div>
+                                    <div style="font-size: 0.65rem; color: #94a3b8; font-weight: 700; text-transform: uppercase;">Дней</div>
+                                </div>
+                                <div>
+                                    <div style="font-size: 1.2rem; font-weight: 800; color: #10b981;">{{ session.pages_per_day }}</div>
+                                    <div style="font-size: 0.65rem; color: #94a3b8; font-weight: 700; text-transform: uppercase;">Стр/День</div>
+                                </div>
+                            </div>
+                            {% else %}
+                            <div style="font-size: 0.75rem; color: #cbd5e1; font-style: italic; padding-top: 1rem; border-top: 1px dashed #e2e8f0;">
+                                Аналитика темпа недоступна
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
                 </div>
             </div>
 

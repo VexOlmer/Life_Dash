@@ -1,12 +1,14 @@
 """Модели данных для модуля книг."""
 
 import re
+from datetime import datetime
 from typing import Any
 
 from pydantic import ConfigDict, field_validator
 from sqlmodel import Field, SQLModel
 
 from src.common.utils import translate
+from src.core.logger import logger
 
 
 class Book(SQLModel, table=True):
@@ -249,3 +251,55 @@ class Book(SQLModel, table=True):
             {"label": translate(k), "value": getattr(self, k), "percent": getattr(self, k) * 10}
             for k in keys
         ]
+        
+    @property
+    def reading_sessions(self) -> list[dict[str, Any]]:
+        """
+            Парсит периоды чтения в формате dd.mm.yyyy, mm.yyyy или yyyy. Разделитель сессий — символ '|'.
+            
+            Returns:
+                list[dict[str, Any]] - Список сессий чтения конкретной книги.
+        """
+        
+        if not self.started:
+            return []
+
+        # 1. Разбиваем строки на списки
+        starts = [s.strip() for s in str(self.started).split("|")]
+        finishes = [f.strip() for f in str(self.finished or "").split("|")]
+        
+        # 2. Выравниваем списки (чтобы для каждого старта был финиш, пусть и пустой)
+        while len(finishes) < len(starts):
+            finishes.append("")
+
+        sessions = []
+        logger.debug(f"Начало сессий - {starts}\n;Концы сессий - {finishes}")
+        
+        for i, (s_raw, f_raw) in enumerate(zip(starts, finishes, strict=True), 1):
+            session = {
+                "number": i,
+                "start": s_raw or "?",
+                "finish": f_raw or "в процессе",
+                "days": None,
+                "pages_per_day": None
+            }
+            logger.debug(f"Начало - {s_raw}, Конец - {f_raw}")
+
+            # 3. Пытаемся считать дни только если ОБЕ даты полные (dd.mm.yyyy = 10 знаков)
+            if len(s_raw) == 10 and len(f_raw) == 10:
+                try:
+                    # Указываем формат дня через точку
+                    d1 = datetime.strptime(s_raw, "%d.%m.%Y")
+                    d2 = datetime.strptime(f_raw, "%d.%m.%Y")
+                    
+                    delta = (d2 - d1).days + 1
+                    if delta > 0:
+                        session["days"] = delta
+                        session["pages_per_day"] = round(self.total / delta, 1)
+                except ValueError as e:
+                    logger.error(f"Формат даты при парсинге сессий чтений не подошел - {e}")
+                    pass
+            
+            sessions.append(session)
+            
+        return sessions
