@@ -3,39 +3,41 @@
 ## Project Architecture
 ```text
 Life_Dash/
-├── scripts
-│   └── maintenance.py
 ├── src
 │   ├── common
-│   │   └── validators.py
+│   │   ├── base.py
+│   │   └── utils.py
 │   ├── core
 │   │   ├── config.py
 │   │   ├── database.py
 │   │   ├── exceptions.py
 │   │   └── logger.py
 │   ├── modules
-│   │   └── daily_notes
+│   │   └── books
 │   │       ├── models.py
 │   │       ├── repository.py
 │   │       ├── router.py
-│   │       ├── schemas.py
-│   │       └── service.py
+│   │       ├── service.py
+│   │       └── transformer.py
 │   ├── parser
 │   │   ├── engine.py
-│   │   ├── loaders.py
-│   │   ├── tasks.py
-│   │   └── transformers.py
+│   │   └── sync.py
 │   ├── web
 │   │   ├── static
 │   │   │   ├── css
-│   │   │   │   └── input.css
+│   │   │   │   └── style.css
 │   │   │   └── js
 │   │   ├── templates
-│   │   │   └── components
+│   │   │   ├── components
+│   │   │   │   └── sync_report.html
+│   │   │   ├── pages
+│   │   │   │   ├── book_detail.html
+│   │   │   │   ├── books.html
+│   │   │   │   └── index.html
+│   │   │   └── layout.html
 │   │   └── router.py
 │   └── main.py
-├── cli.py
-└── Видение сайта.txt
+└── cli.py
 ```
 
 ---
@@ -44,170 +46,1258 @@ Life_Dash/
 
 ### FILE: `cli.py`
 ```python
-
-```
-
----
-
-### FILE: `scripts\maintenance.py`
-```python
-
+"""Модуль запуска проекта через консоль."""
 ```
 
 ---
 
 ### FILE: `src\main.py`
 ```python
+"""Главный модуль приложения Obsidian Analytics."""
 
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
+
+import uvicorn
+from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+
+from src.core.config import settings
+from src.core.logger import logger
+from src.modules.books.router import router as books_router
+from src.web.router import router as web_router
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    """
+        Управляет жизненным циклом приложения.
+
+        Выполняет инициализацию базы данных при запуске и логирует
+            события старта и остановки.
+
+        Args:
+            app: Экземпляр приложения FastAPI.
+        
+        Returns:
+            AsyncGenerator[None, None]: Жизненный цикл сайта.
+    """
+    
+    # --- Действия при запуске (Startup) ---
+    logger.info("Запуск приложения Obsidian Analytics...")
+    
+    yield  # Принятие запросов приложением
+    
+    # --- Действия при остановке (Shutdown) ---
+    logger.info("Остановка приложения...")
+
+
+app = FastAPI(
+    title="Obsidian Analytics",
+    description="Аналитический дашборд для базы знаний Obsidian",
+    version="0.1.0",
+    debug=settings.DEBUG,
+    lifespan=lifespan,
+)
+app.mount("/static", StaticFiles(directory="src/web/static"), name="static")
+
+app.include_router(web_router)    # Главная страница (/)
+app.include_router(books_router)  # Модуль книг (/books)
+
+
+@app.get("/health")
+async def health_check() -> dict[str, str | bool]:
+    """
+        Проверка доступности API и базы знаний.
+
+        Returns:
+            dict[str, str | bool]: Статус приложения и доступность Vault.
+    """
+    
+    return {
+        "status": "online",
+        "vault_ready": settings.OBSIDIAN_VAULT_PATH.exists(),
+        "vault_path": str(settings.OBSIDIAN_VAULT_PATH),
+    }
+
+
+if __name__ == "__main__":
+    uvicorn.run(
+        "src.main:app",
+        host=settings.HOST,
+        port=settings.PORT,
+        reload=settings.DEBUG,
+    )
 ```
 
 ---
 
-### FILE: `src\common\validators.py`
+### FILE: `src\common\base.py`
 ```python
+"""Базовые классы для работы с данными."""
 
+from typing import Generic, TypeVar
+
+from sqlmodel import Session, SQLModel, select
+
+# T — это тип нашей модели (Book, Game и т.д.)
+T = TypeVar("T", bound=SQLModel)
+
+
+class BaseRepository(Generic[T]):
+    """Базовый репозиторий для CRUD операций."""
+
+    def __init__(self, session: Session, model_type: type[T]) -> None:
+        """
+            Инициализирует репозиторий.
+
+            Args:
+                session: Сессия базы данных.
+                model_type: Класс модели (напр. Book).
+        """
+        
+        self.session = session
+        self.model_type = model_type
+
+    def get_by_path(self, relative_path: str) -> T | None:
+        """
+            Находит запись по пути к файлу.
+
+            Args:
+                relative_path: Относительный путь от корня Vault.
+            
+            Returns:
+                T | None
+        """
+        
+        # Мы предполагаем, что у всех моделей будет поле file_path
+        statement = select(self.model_type).where(
+            self.model_type.file_path == relative_path  # type: ignore
+        )
+        return self.session.exec(statement).first()
+
+    def upsert(self, instance: T) -> None:
+        """
+            Обновляет существующую запись или создает новую.
+
+            Args:
+                instance: Экземпляр модели.
+            
+            Returns:
+                None
+        """
+        
+        existing = self.get_by_path(instance.file_path)  # type: ignore
+
+        if existing:
+            # Превращаем модель в словарь и обновляем поля
+            data = instance.model_dump(exclude={"id"})
+            for key, value in data.items():
+                setattr(existing, key, value)
+            self.session.add(existing)
+        else:
+            self.session.add(instance)
+        
+        self.session.commit()
+
+    def delete_by_path(self, relative_path: str) -> None:
+        """
+            Удаляет запись из БД.
+
+            Args:
+                relative_path: Относительный путь к файлу.
+            
+            Returns:
+                None
+        """
+        
+        instance = self.get_by_path(relative_path)
+        if instance:
+            self.session.delete(instance)
+            self.session.commit()
+            
+    def get_all_paths(self) -> list[str]:
+        """
+            Возвращает список всех путей файлов, зарегистрированных в БД.
+            
+            Returns:
+                list[str] - Список всех путей файлов
+        """
+        statement = select(self.model_type.file_path)
+        return self.session.exec(statement).all()
+```
+
+---
+
+### FILE: `src\common\utils.py`
+```python
+"""Утилиты для преобразования данных (перевод, форматирование)."""
+
+TRANSLATIONS: dict[str, str] = {
+    # Статусы
+    "plan": "В планах",
+    "reading": "Читаю",
+    "finished": "Прочитано",
+    "dropped": "Брошено",
+
+    # Форматы
+    "paper": "Бумажная книга",
+    "electronic": "Электронная книга",
+    "audio": "Аудиокнига",
+
+    # Основные жанры
+    "fantasy": "Фэнтези",
+    "sci-fi": "Научная фантастика",
+    "thriller": "Триллер",
+    "drama": "Драма",
+    "horror": "Ужасы",
+    "adventure": "Приключения",
+    "romance": "Романтика",
+    "detective": "Детектив",
+    "mystery": "Мистика",
+    "crime": "Криминал",
+    "spy-fiction": "Шпионский",
+    "non-fiction": "Документальный",
+    "historical": "Исторический",
+    "gothic": "Готика",
+    "self-help": "Саморазвитие",
+    "biography": "Биография",
+    "travel": "Путешествия",
+    "science": "Наука",
+    "philosophy": "Философия",
+    "action": "Боевик",
+    "business": "Бизнес",
+    "poetry": "Поэзия",
+    "classic": "Классика",
+    "comedy": "Комедия",
+    "animation": "Анимация",
+    "sitcom": "Ситком",
+
+    # Поджанры (универсально для всех категорий)
+    "high": "высокое",
+    "epic": "эпическое",
+    "dark": "тёмное",
+    "neutral": "нейтральное",
+    "light": "светлое",
+    "heroic": "героическое",
+    "urban": "городское",
+    "mythic": "мифологическое",
+    "hard": "сложная",
+    "space-opera": "космическая опера",
+    "cyberpunk": "киберпанк",
+    "dystopian": "антиутопия",
+    "post-apocalyptic": "постапокалиптика",
+    "time-travel": "путешествие во времени",
+    "alien-invasion": "инопланетное вторжение",
+    "military": "военная",
+    "psychological": "психологическая",
+    "conspiracy": "заговор",
+    "legal": "юридическая",
+    "social": "социальная",
+    "family": "семейная",
+    "war": "военная",
+    "supernatural": "сверхъестественное",
+    "body": "боди-хоррор",
+    "cosmic": "лавкрафтовский ужас",
+    "slasher": "слэшер",
+    
+    "rating_characters": "Герои",
+    "rating_plot": "Сюжет",
+    "rating_size": "Объем",
+    "rating_prose": "Слог",
+    "rating_ending": "Финал",
+    "rating_depth": "Глубина",
+    "rating_atmosphere": "Атмосфера",
+    "rating_rereadability": "Перечитывание",
+    "rating_expected_real": "Ожидание / Реальность",
+    "rating_recommend": "Рекомендация",
+}
+
+def translate(key: str | None) -> str:
+    """Переводит технический термин на русский. Если перевода нет, возвращает оригинал."""
+    if not key:
+        return "-"
+    
+    # Пытаемся найти ключ в словаре (приводим к нижнему регистру на случай опечаток)
+    low_key = key.lower().strip()
+    return TRANSLATIONS.get(low_key, key.capitalize())
 ```
 
 ---
 
 ### FILE: `src\core\config.py`
 ```python
-"""
+"""Модуль конфигурации приложения."""
 
-"""
-
-
-from pydantic_settings import BaseSettings, SettingsConfigDict
 from pathlib import Path
 
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+Path("data").mkdir(exist_ok=True)
 
 class Settings(BaseSettings):
-    PROJECT_NAME:   str = "Life Dash"
-    OBSIDIAN_PATH:  Path
-    DATABASE_URL:   str
-    DEBUG:          bool = False
+    """
+        Настройки приложения, загружаемые из .env файла.
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+        Attributes:
+            OBSIDIAN_VAULT_PATH: Абсолютный путь к базе знаний Obsidian.
+            BOOKS_PATH: Путь к книгам относительно корня Vault.
+            GAMES_PATH: Путь к играм относительно корня Vault.
+            MOVIES_PATH: Путь к фильмам относительно корня Vault.
+            SERIES_PATH: Путь к сериалам относительно корня Vault.
+            DAILY_PATH: Путь к дневным заметкам относительно корня Vault.
+            WEEKLY_PATH: Путь к недельным заметкам относительно корня Vault.
+            DATABASE_URL: URL подключения к базе данных SQLite.
+            DEBUG: Режим отладки.
+            HOST: Хост для запуска сервера.
+            PORT: Порт для запуска сервера.
+    """
+
+    OBSIDIAN_VAULT_PATH: Path
+
+    BOOKS_PATH: str = "notes/books"
+    GAMES_PATH: str = "notes/games"
+    MOVIES_PATH: str = "notes/movies_series/movies"
+    SERIES_PATH: str = "notes/movies_series/series"
+    DAILY_PATH: str = "periodic/daily"
+    WEEKLY_PATH: str = "periodic/weekly"
+
+    DATABASE_URL: str = "sqlite:///./data/db.sqlite"
+
+    DEBUG: bool = False
+    HOST: str = "127.0.0.1"
+    PORT: int = 8000
+
+    # Настройка поиска .env файла внутри папки src/core
+    model_config = SettingsConfigDict(
+        env_file=Path(__file__).parent / ".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
 
 settings = Settings()
-
 ```
 
 ---
 
 ### FILE: `src\core\database.py`
 ```python
-"""
+"""Модуль управления базой данных."""
 
-"""
+import logging
+from collections.abc import Generator
+from pathlib import Path
 
+from sqlmodel import Session, SQLModel, create_engine
 
-from sqlmodel import create_engine, Session, SQLModel
+from src.core.config import settings
+from src.core.logger import logger
 
-from .config import settings
-
-
-# connect_args нужны только для SQLite, чтобы избежать проблем с потоками
-engine = create_engine(
-    settings.DATABASE_URL, 
-    connect_args={"check_same_thread": False},
-    echo=settings.DEBUG  # Вывод всех SQL-запросы в консоль
-)
+logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
+engine = create_engine(settings.DATABASE_URL, echo=settings.DEBUG)
 
 
-def init_db():
+def init_db() -> None:
     """
-        Создает все таблицы, описанные в моделях
+        Инициализирует базу данных.
+
+        Создает папку data и все таблицы, описанные в моделях SQLModel.
     """
     
-    SQLModel.metadata.create_all(engine)
+    try:
+        db_path = Path("data")
+        db_path.mkdir(exist_ok=True)
+
+        SQLModel.metadata.create_all(engine)
+        logger.success("База данных успешно инициализирована.")
+    except Exception as e:
+        logger.error(f"Критическая ошибка при инициализации БД: {e}")
+        raise
 
 
-def get_session():
+def get_session() -> Generator[Session, None, None]:
     """
-        Генератор сессии для FastAPI
+        Создает сессию базы данных.
+
+        Yields:
+            Session: Активная сессия SQLModel.
     """
     
     with Session(engine) as session:
         yield session
-        
 ```
 
 ---
 
 ### FILE: `src\core\exceptions.py`
 ```python
+"""Кастомные исключения для проекта."""
 
+class ValidationError(Exception):
+    """Исключение, возникающее при отсутствии обязательных полей в заметке или нарушении данных в них."""
+    pass
 ```
 
 ---
 
 ### FILE: `src\core\logger.py`
 ```python
+"""Модуль настройки логирования."""
 
+import sys
+from datetime import datetime
+from pathlib import Path
+
+from loguru import logger as logger
+
+
+def setup_logger() -> None:
+    """
+        Конфигурирует Loguru для вывода в консоль и уникальную папку запуска.
+
+        Создает директорию logs/run_YYYY-MM-DD_HH-MM-SS/ для каждого нового запуска.
+    """
+    
+    # 1. Генерируем уникальный ID запуска на основе текущего времени
+    run_id = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    
+    # 2. Формируем путь к папке этого конкретного запуска
+    base_log_dir = Path("logs")
+    current_run_dir = base_log_dir / f"run_{run_id}"
+    
+    current_run_dir.mkdir(parents=True, exist_ok=True)
+    logger.remove()
+
+    # 3. Вывод в консоль (остается общим)
+    logger.add(
+        sys.stdout,
+        format="<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{message}</cyan>",
+        level="INFO",
+    )
+
+    # 4. Лог текущего запуска (INFO и выше)
+    logger.add(
+        current_run_dir / "main.log",
+        format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {module}:{function}:{line} - {message}",
+        level="DEBUG",
+        encoding="utf-8",
+    )
+
+    # 5. Лог ошибок текущего запуска (только ERROR и выше)
+    logger.add(
+        current_run_dir / "errors.log",
+        format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {module}:{function}:{line} - {message} {exception}",
+        level="ERROR",
+        encoding="utf-8",
+    )
+
+    logger.info(f"Сессия логирования инициализирована: {current_run_dir}")
+
+setup_logger()
 ```
 
 ---
 
-### FILE: `src\modules\daily_notes\models.py`
+### FILE: `src\modules\books\models.py`
 ```python
+"""Модели данных для модуля книг."""
 
+import re
+from datetime import datetime
+from typing import Any
+
+from pydantic import ConfigDict, field_validator
+from sqlmodel import Field, SQLModel
+
+from src.common.utils import translate
+from src.core.logger import logger
+
+
+class Book(SQLModel, table=True):
+    """Модель книги на основе расширенного шаблона Obsidian."""
+
+    id: int | None = Field(default=None, primary_key=True)
+
+    # Основная информация (YAML)
+    title: str
+    title_orig: str | None = None
+    author: str = "Unknown"
+    country_author: str = "Unknown"
+    year: int
+    total: int
+    isbn: str | None = None
+    status: str = "finished"
+    genres: str
+    series: str | None = None
+    format: str
+    language: str
+    good_reads: int | None = Field(default=None)
+    
+    # Даты начала и конца чтения
+    started: str | None = None
+    finished: str | None = None
+    
+    # Рейтинги (10 параметров)
+    rating_characters: float
+    rating_plot: float
+    rating_size: float
+    rating_prose: float
+    rating_ending: float
+    rating_depth: float
+    rating_atmosphere: float
+    rating_rereadability: float
+    rating_expected_real: float
+    rating_recommend: float
+    
+    # Итоговый рейтинг (сумма 10 параметров)
+    total_rating: float = Field(default=0.0)
+    
+    # Цвета фона и текста
+    bg_color: str = Field(default="#ffffff")
+    text_color: str = Field(default="#000000")
+
+    # Служебные поля
+    file_path: str = Field(unique=True, index=True)
+    last_modified: float
+    created_at: str
+    
+    model_config = ConfigDict(
+        validate_assignment=True,
+        arbitrary_types_allowed=True
+    )   
+    
+    # --- ВАЛИДАТОРЫ ---
+
+    @field_validator("bg_color", "text_color", mode="before")
+    @classmethod
+    def validate_colors(cls, v: str) -> str:
+        """Валидация корректности цветов."""
+        if not v.startswith("#") or len(v) not in [4, 7]:
+            raise ValueError("Цвет должен быть HEX-формата (#fff или #ffffff)")
+        return v
+
+    @field_validator(
+        "rating_characters", "rating_plot", "rating_size", "rating_prose",
+        "rating_ending", "rating_depth", "rating_atmosphere", 
+        "rating_rereadability", "rating_expected_real", "rating_recommend",
+        mode="before"
+    )
+    @classmethod
+    def validate_ratings(cls, v: float) -> float:
+        """Валидация рейтинговых параметров."""
+        if not (0 <= v <= 10):
+            raise ValueError("Рейтинг должен быть в диапазоне от 0 до 10")
+        return v
+
+    @field_validator("genres", mode="before")
+    @classmethod
+    def validate_genres(cls, v: str) -> str:
+        """Валидация жанров и поджанров."""
+        if not v.strip():
+            raise ValueError("Список жанров не может быть пустым")
+        
+        # Получение основных жанров минуя поджанры
+        genre_blocks = re.split(r',\s*(?![^()]*\))', v)
+        genre_blocks = [g.strip() for g in genre_blocks if g.strip()]
+
+        if not (1 <= len(genre_blocks) <= 3):
+            raise ValueError(f"Должно быть от 1 до 3 основных жанров (найдено: {len(genre_blocks)})")
+
+        for block in genre_blocks:
+            # Получение поджанров, находящихся в скобках
+            subgenres_match = re.search(r'\((.*?)\)', block)
+            if subgenres_match:
+                sub_list = [s.strip() for s in subgenres_match.group(1).split(',') if s.strip()]
+                if len(sub_list) > 2:
+                    raise ValueError(f"В жанре '{block}' не может быть более 2-х поджанров")
+        return v
+
+    # --- СВОЙСТВА ДЛЯ ЛОГОВ И ВЕБА ---
+
+    @property
+    def primary_genres_list(self) -> list[str]:
+        """Получение основных жанров."""
+        if not self.genres:
+            return []
+        
+        clean = re.sub(r'\s*\([^)]*\)', '', self.genres)
+        return [g.strip() for g in clean.split(',') if g.strip()]
+
+    @property
+    def detailed_genres_list(self) -> list[dict[str, str]]:
+        """Получение словаря жанров и его поджанров."""
+        if not self.genres:
+            return []
+        
+        results = []
+        blocks = re.split(r',\s*(?![^()]*\))', self.genres)
+        for block in blocks:
+            name = re.sub(r'\s*\([^)]*\)', '', block).strip()
+            sub = ""
+            match = re.search(r'\((.*?)\)', block)
+            
+            if match:
+                sub = match.group(1).strip()
+            results.append({"name": name, "sub": sub})
+        return results
+    
+    @property
+    def to_pretty_str(self) -> str:
+        """Возвращает идеально выровненную таблицу данных книги для логов."""
+            
+        # 1. Получаем данные через __dict__, чтобы SQLModel ничего не скрыл
+        # Исключаем служебные и внутренние поля SQLAlchemy
+        exclude = {"id", "last_modified", "metadata", "registry"}
+        
+        display_rows = []
+        max_key_width = 0
+        max_val_width = 0
+
+        # Проходимся по всем полям модели
+        for key in self.model_fields.keys():
+            if key in exclude:
+                continue
+            
+            val = getattr(self, key)
+            display_key = key.replace("_", " ").capitalize()
+            display_val = str(val) if val is not None else "-"
+            
+            display_rows.append((display_key, display_val))
+            max_key_width = max(max_key_width, len(display_key))
+            max_val_width = max(max_val_width, len(display_val))
+
+        # 2. Расчет ширины
+        title_line = f"BOOK DATA: {self.title}"
+        # Даем запас под длинные пути
+        content_width = max(max_key_width + max_val_width + 5, len(title_line), 60)
+        
+        # 3. Сборка рамки
+        top    = f"┏{'━' * (content_width + 2)}┓"
+        header = f"┃ {title_line:<{content_width}} ┃"
+        sep    = f"┣{'━' * (content_width + 2)}┫"
+        bottom = f"┗{'━' * (content_width + 2)}┛"
+
+        lines = [f"\n{top}", header, sep]
+
+        for k, v in display_rows:
+            # Математически точное выравнивание
+            spacing = content_width - len(k) - len(v) - 3
+            lines.append(f"┃ {k} : {v}{' ' * spacing} ┃")
+
+        lines.append(bottom)
+        return "\n".join(lines)
+        
+    def __init__(self, **data: Any) -> None:  # noqa: ANN401
+        """Рассчитываем общий рейтинг по 10 параметрам."""
+        
+        # 1. Список полей для расчета
+        rating_keys = [
+            "rating_characters", "rating_plot", "rating_size", 
+            "rating_prose", "rating_ending", "rating_depth", 
+            "rating_atmosphere", "rating_rereadability", 
+            "rating_expected_real", "rating_recommend"
+        ]
+        
+        # 2. Считаем сумму из входящего словаря данных
+        # Если каких-то данных нет, берем 0.0
+        total = sum(float(data.get(k, 0.0) or 0.0) for k in rating_keys)
+        
+        # 3. Записываем результат в словарь данных, который пойдет в базу
+        data["total_rating"] = total
+        
+        # 4. Вызываем инициализацию родительского класса (SQLModel)
+        super().__init__(**data)
+        
+        # 5. Принудительно обновляем атрибут после создания (для надежности)
+        self.total_rating = total
+        
+    
+    @property
+    def status_ru(self) -> str:
+        """Локализация статуса прочтения книги."""
+        return translate(self.status)
+
+    @property
+    def format_ru(self) -> str:
+        """Локализация формата книги."""
+        return translate(self.format)
+
+    @property
+    def primary_genres_list_ru(self) -> list[str]:
+        """Локализация списка основных жанров."""
+        return [translate(g) for g in self.primary_genres_list]
+
+    @property
+    def detailed_genres_list_ru(self) -> list[dict[str, str]]:
+        """Локализация список жанров и поджанров."""
+        
+        results = []
+        for g in self.detailed_genres_list:
+            name_ru = translate(g["name"])
+            
+            subs = g["sub"].split(",")
+            subs_ru = ", ".join([translate(s.strip()) for s in subs if s.strip()])
+            
+            results.append({"name": name_ru, "sub": subs_ru})
+        return results
+    
+    @property
+    def ratings_map(self) -> list[dict[str, Any]]:
+        """Возвращает список словарей с переведенным именем и значением рейтинга."""
+        
+        keys = [
+            "rating_characters", "rating_plot", "rating_size", "rating_prose",
+            "rating_ending", "rating_depth", "rating_atmosphere", 
+            "rating_rereadability", "rating_expected_real", "rating_recommend"
+        ]
+        return [
+            {"label": translate(k), "value": getattr(self, k), "percent": getattr(self, k) * 10}
+            for k in keys
+        ]
+        
+    @property
+    def reading_sessions(self) -> list[dict[str, Any]]:
+        """
+            Парсит периоды чтения в формате dd.mm.yyyy, mm.yyyy или yyyy. Разделитель сессий — символ '|'.
+            
+            Returns:
+                list[dict[str, Any]] - Список сессий чтения конкретной книги.
+        """
+        
+        if not self.started:
+            return []
+
+        # 1. Разбиваем строки на списки
+        starts = [s.strip() for s in str(self.started).split("|")]
+        finishes = [f.strip() for f in str(self.finished or "").split("|")]
+        
+        # 2. Выравниваем списки (чтобы для каждого старта был финиш, пусть и пустой)
+        while len(finishes) < len(starts):
+            finishes.append("")
+
+        sessions = []
+        logger.debug(f"Начало сессий - {starts}\n;Концы сессий - {finishes}")
+        
+        for i, (s_raw, f_raw) in enumerate(zip(starts, finishes, strict=True), 1):
+            session = {
+                "number": i,
+                "start": s_raw or "?",
+                "finish": f_raw or "в процессе",
+                "days": None,
+                "pages_per_day": None
+            }
+            logger.debug(f"Начало - {s_raw}, Конец - {f_raw}")
+
+            # 3. Пытаемся считать дни только если ОБЕ даты полные (dd.mm.yyyy = 10 знаков)
+            if len(s_raw) == 10 and len(f_raw) == 10:
+                try:
+                    # Указываем формат дня через точку
+                    d1 = datetime.strptime(s_raw, "%d.%m.%Y")
+                    d2 = datetime.strptime(f_raw, "%d.%m.%Y")
+                    
+                    delta = (d2 - d1).days + 1
+                    if delta > 0:
+                        session["days"] = delta
+                        session["pages_per_day"] = round(self.total / delta, 1)
+                except ValueError as e:
+                    logger.error(f"Формат даты при парсинге сессий чтений не подошел - {e}")
+                    pass
+            
+            sessions.append(session)
+            
+        return sessions
 ```
 
 ---
 
-### FILE: `src\modules\daily_notes\repository.py`
+### FILE: `src\modules\books\repository.py`
 ```python
+"""Репозиторий для работы с книгами в БД."""
 
+from sqlmodel import Session
+
+from src.common.base import BaseRepository
+
+from .models import Book
+
+
+class BookRepository(BaseRepository[Book]):
+    """Репозиторий для управления данными книг."""
+
+    def __init__(self, session: Session) -> None:
+        """Инициализирует репозиторий книг."""
+        super().__init__(session, Book)
 ```
 
 ---
 
-### FILE: `src\modules\daily_notes\router.py`
+### FILE: `src\modules\books\router.py`
 ```python
+"""Роутер для управления разделом книг."""
 
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
+from sqlmodel import Session, func, or_, select
+
+from src.core.database import get_session
+from src.parser.sync import sync_books
+
+from .models import Book
+from .service import BookService
+
+router = APIRouter(prefix="/books", tags=["Books"])
+templates = Jinja2Templates(directory="src/web/templates")
+SessionDep = Annotated[Session, Depends(get_session)]
+
+
+@router.get("/", response_class=HTMLResponse)
+async def list_books(
+    request: Request, 
+    session: SessionDep, 
+    sort: str = "total_rating",
+    order: str = "desc",
+    page: int = 1,
+    size: int = 20,
+    q: str | None = None
+) -> HTMLResponse:
+    """
+        Список книг с пагинацией и сортировкой.
+    
+        Args:
+            request: Объект HTTP-запроса.
+            session: Текущая сессия.
+            sort: Колонка для первоначальной сортировки.
+            order: Тип сортировки (по возрастанию/убыванию).
+            page: Первоначальная страница.
+            size: Кол-во документов на странице.
+            q: Данные в поисковой строке.
+        
+        Returns:
+            HTMLResponse: Обновленный шаблон страницы.
+    """
+    
+    # 1. Формируем базовый запрос
+    statement = select(Book)
+    count_statement = select(func.count()).select_from(Book)
+
+    # 2. Если есть поисковый запрос, фильтруем по названию или автору
+    if q:
+        filter_condition = or_(
+            Book.title.icontains(q), 
+            Book.author.icontains(q),
+            Book.series.icontains(q)
+        )
+        statement = statement.where(filter_condition)
+        count_statement = count_statement.where(filter_condition)
+
+    # 3. Считаем общее количество с учетом фильтра
+    total_count = session.exec(count_statement).one()
+    total_pages = (total_count + size - 1) // size
+
+    if page < 1:
+        page = 1
+    if page > total_pages and total_pages > 0:
+        page = total_pages
+        
+    # 4. Рассчет диапазона ближайщих страниц
+    start_range = max(1, page - 2)
+    end_range = min(total_pages, page + 2)
+    page_numbers = list(range(start_range, end_range + 1))
+
+    # 5. Получаем атрибут для сортировки
+    column = getattr(Book, sort, Book.total_rating)
+    expression = column.desc() if order == "desc" else column.asc()
+    
+    # 6. Запрос с лимитом и смещением (LIMIT / OFFSET)
+    offset = (page - 1) * size
+    statement = statement.order_by(expression).offset(offset).limit(size)
+    books = session.exec(statement).all()
+    
+    # 7. Номера книг, показанных на текущей странице
+    showing_from = offset + 1 if total_count > 0 else 0
+    showing_to = min(offset + size, total_count)
+    
+    # Варинты сортировки списка книг
+    labels = {
+        "total_rating": "Общий рейтинг",
+        "total": "Количество страниц",
+        "year": "Год издания",
+        "good_reads": "GoodReads",
+        "rating_characters": "Герои",
+        "rating_plot": "Сюжет",
+        "rating_size": "Объем",
+        "rating_prose": "Слог",
+        "rating_ending": "Финал",
+        "rating_depth": "Глубина",
+        "rating_atmosphere": "Атмосфера",
+        "rating_rereadability": "Перечитывание",
+        "rating_expected_real": "Ожидание / Реальность",
+        "rating_recommend": "Рекомендация"
+    }
+    
+    return templates.TemplateResponse(
+        "pages/books.html", 
+        {
+            "request": request,
+            "books": books, 
+            "current_sort": sort,
+            "current_order": order,
+            "current_page": page,
+            "current_search": q or "",
+            "total_pages": total_pages,
+            "page_numbers": page_numbers,
+            "showing_from": showing_from,
+            "showing_to": showing_to,
+            "total_count": total_count,
+            "sort_label": labels.get(sort, "Сортировка"),
+            "labels": labels
+        }
+    )
+
+@router.post("/sync")
+async def sync_books_endpoint(
+    request: Request, 
+    session: SessionDep, 
+    force: bool = False
+) -> HTMLResponse:
+    """Запускает синхронизацию книг."""
+    stats = sync_books(session, force=force)
+    return templates.TemplateResponse(
+        "components/sync_report.html", 
+        {"request": request, "stats": stats}
+    )
+
+@router.get("/{book_id}")
+async def book_detail(request: Request, book_id: int, session: SessionDep) -> HTMLResponse:
+    """
+        Детальная страница книги.
+
+        Args:
+            request: Объект HTTP-запроса
+            book_id: Путь к файлу в Obsidian Vault
+            session: Текущая сессия
+        
+        Returns:
+            HTMLResponse: Обновленный шаблон страницы
+    """
+    
+    book = session.get(Book, book_id)
+    if not book:
+        raise HTTPException(status_code=404, detail="Книга не найдена")
+
+    # Получаем динамический контент из файла
+    extra_content = BookService.get_book_content(book.file_path)
+
+    return templates.TemplateResponse(
+        "pages/book_detail.html", 
+        {
+            "request": request, 
+            "book": book, 
+            "content": extra_content
+        }
+    )
 ```
 
 ---
 
-### FILE: `src\modules\daily_notes\schemas.py`
+### FILE: `src\modules\books\service.py`
 ```python
+"""Сервис для динамического извлечения контента из заметок Obsidian."""
 
+import re
+
+from src.core.config import settings
+
+
+class BookService:
+    """Сервис для работы с содержимым файлов книг."""
+
+    @staticmethod
+    def get_book_content(relative_path: str) -> dict[str, str]:
+        """
+            Парсит файл и извлекает специфические разделы по заголовкам.
+            
+            Args:
+                relative_path: Путь к файлу в Obsidian Vault.
+        """
+        
+        full_path = settings.OBSIDIAN_VAULT_PATH / relative_path
+        if not full_path.exists():
+            return {}
+
+        content = full_path.read_text(encoding="utf-8")
+
+        # Универсальная функция для поиска контента между заголовками
+        def extract_section(header_name: str) -> str:
+            # Ищем заголовок, затем забираем всё до следующего ## или --- или конца файла
+            # Флаг re.DOTALL позволяет точке . захватывать переносы строк
+            pattern = rf"{re.escape(header_name)}(.*?)(?=\n##|\n---|\Z)"
+            match = re.search(pattern, content, re.DOTALL)
+            if match:
+                return match.group(1).strip()
+            return ""
+
+        return {
+            "main_characters": extract_section("## 👤 Главные герои"),
+            "side_characters": extract_section("## 👤 Второстепенные герои"),
+            "impression": extract_section("## ❤️ Моё впечатление"),
+            "quotes": extract_section("## 📝 Цитаты"),
+        }
 ```
 
 ---
 
-### FILE: `src\modules\daily_notes\service.py`
+### FILE: `src\modules\books\transformer.py`
 ```python
+"""Модуль обработки заметок о книгах."""
 
+from pathlib import Path
+
+import frontmatter
+
+from src.core.exceptions import ValidationError
+from src.core.logger import logger
+
+from .models import Book
+
+
+class BookTransformer:
+    """Трансформер для обработки расширенного YAML книг."""
+    
+    @staticmethod
+    def transform(file_path: Path, vault_path: Path, mtime: float) -> Book:
+        """
+            Превращает Markdown файл в объект Book с расчетом суммы рейтинга.
+
+            Args:
+                file_path: Полный путь к Mardown файлу
+                vault_path: Полный путь к базе знаний Obsidian
+                mtime: Время последнего обновления
+            
+            Returns:
+                Book: Готовая модель класса Book
+        """
+        
+        logger.debug(f"Начало обработки: {file_path.name}")
+        
+        # Считывание верхней части файла в YAML формате
+        try:
+            post = frontmatter.load(file_path)
+        except Exception as e:
+            logger.error(f"Не удалось прочитать YAML в {file_path.name}")
+            raise ValidationError(f"Ошибка структуры YAML: {e}") from e
+        
+        meta = post.metadata
+
+        # Извлекаем все данные из метадаты, валидация автоматическая
+        return Book(
+            title=meta.get("title", file_path.stem),
+            title_orig=meta.get("title_orig"),
+            author=meta.get("author"),
+            country_author=meta.get("country_author"),
+            year=meta.get("year"),
+            total=meta.get("total"),
+            isbn=meta.get("isbn"),
+            status=meta.get("status", "finished"),
+            genres=str(meta.get("genres")),
+            series=meta.get("series"),
+            format=meta.get("format"),
+            language=meta.get("language"),
+            good_reads=meta.get("good_reads"),
+            started=str(meta.get("started", "")) if meta.get("started") else None,
+            finished=str(meta.get("finished", "")) if meta.get("finished") else None,
+            bg_color=str(meta.get("bg_color", "#ffffff")),
+            text_color=str(meta.get("text_color", "#000000")),
+            
+            rating_characters=meta.get("rating_characters"),
+            rating_plot=meta.get("rating_plot"),
+            rating_size=meta.get("rating_size"),
+            rating_prose=meta.get("rating_prose"),
+            rating_ending=meta.get("rating_ending"),
+            rating_depth=meta.get("rating_depth"),
+            rating_atmosphere=meta.get("rating_atmosphere"),
+            rating_rereadability=meta.get("rating_rereadability"),
+            rating_expected_real=meta.get("rating_expected_real"),
+            rating_recommend=meta.get("rating_recommend"),
+            
+            # Находим относительный путь к файлу относительно всей базы
+            file_path=str(file_path.relative_to(vault_path)),
+            last_modified=mtime,
+            created_at=str(meta.get("created", ""))
+        )
 ```
 
 ---
 
 ### FILE: `src\parser\engine.py`
 ```python
+"""Модуль сканирования файлов Obsidian."""
 
+import os
+from pathlib import Path
+
+from src.core.logger import logger
+
+
+class ScannerEngine:
+    """Инструмент для поиска файлов в базе знаний."""
+
+    @staticmethod
+    def scan_folder(folder_path: Path, extension: str = ".md") -> list[tuple[Path, float]]:
+        """
+            Сканирует директорию и возвращает пути к файлам и дату изменения.
+
+            Args:
+                folder_path: Абсолютный путь к папке.
+                extension: Расширение файлов (по умолчанию .md).
+
+            Returns:
+                list[tuple[Path, float]]: Список (Путь, Timestamp).
+        """
+        
+        files_data: list[tuple[Path, float]] = []
+
+        if not folder_path.exists():
+            logger.error(f"Папка не найдена: {folder_path}")
+            return files_data
+
+        for root, _, files in os.walk(folder_path):
+            for file in files:
+                if file.endswith(extension):
+                    path = Path(root) / file
+                    try:
+                        mtime = os.path.getmtime(path)
+                        files_data.append((path, mtime))
+                    except OSError as e:
+                        logger.warning(f"Не удалось прочитать mtime файла {path}: {e}")
+        
+        return files_data
 ```
 
 ---
 
-### FILE: `src\parser\loaders.py`
+### FILE: `src\parser\sync.py`
 ```python
+"""Оркестратор синхронизации книг."""
 
-```
+import time
+from pathlib import Path
+from typing import Any
 
----
+from pydantic import ValidationError as PydanticValidationError
+from sqlalchemy.exc import IntegrityError
+from sqlmodel import Session
 
-### FILE: `src\parser\tasks.py`
-```python
+from src.core.config import settings
+from src.core.logger import logger
+from src.modules.books.repository import BookRepository
+from src.modules.books.transformer import BookTransformer
+from src.web.router import stats_cache
 
-```
+from .engine import ScannerEngine
 
----
 
-### FILE: `src\parser\transformers.py`
-```python
+def sync_books(session: Session, force: bool = False) -> dict[str, Any]:
+    """
+        Синхронизация заметок из базы знаний с БД.
+    
+        Если файл не менялся, пропускается, иначе файл парсится и обновляется информация в БД.
+        Если обработка заметки завершилась ошибкой, она не будет добавлена в БД.
+        
+        Args:
+            session: Текущая сессия.
+            force: Флаг принудительного обновления данных в БД.
+            
+        Returns:
+            dict[str, Any] - Словарь статистики статусов синхронизации файлов
+    """
+    
+    start_time = time.time()
+    vault_path = Path(settings.OBSIDIAN_VAULT_PATH)
+    books_folder = vault_path / settings.BOOKS_PATH
+    
+    logger.info(f"Начало синхронизации. Папка: {books_folder}")
+    
+    scanner = ScannerEngine()
+    repo = BookRepository(session)
+    files = scanner.scan_folder(books_folder)
+    
+    logger.info(f"Сканирование завершено. Найдено файлов: {len(files)}")
+    
+    # --- Сверка путей к файлам в БД с реальными файлами в базе знаний ---
+    db_paths = set(repo.get_all_paths())
+    current_files_rel = {str(f[0].relative_to(vault_path)) for f in files}
+    
+    deleted_count = 0
+    paths_to_delete = db_paths - current_files_rel
+    logger.info(f"Кол-во файлов в БД, которых нет в системе - {len(paths_to_delete)}")
+    for path in paths_to_delete:
+        repo.delete_by_path(path)
+        logger.info(f"Удалена запись (файл не найден): {path}")
+        deleted_count += 1
+    
+    stats: dict[str, Any] = {
+        "total": len(files),
+        "updated": 0,
+        "errors": 0,
+        "deleted": deleted_count,
+        "error_details": []
+    }
+    
+    for f_path, mtime in files:
+        rel_path = str(f_path.relative_to(vault_path))
+    
+        # 1. Попытка поиска (может упасть, если прошлая итерация не сделала rollback)
+        try:
+            db_item = repo.get_by_path(rel_path)
+            if not force and db_item and db_item.last_modified >= mtime:
+                logger.debug(f"Пропуск (не менялся): {rel_path}")
+                continue
+        except Exception as e:
+            logger.error(f"Ошибка доступа к БД при поиске {rel_path}: {e}")
+            session.rollback() # Чиним сессию
+            continue
+            
+        try:
+            logger.info(f"Обработка файла: {rel_path}")
+            book_obj = BookTransformer.transform(f_path, vault_path, mtime)
+            
+            repo.upsert(book_obj)
+            logger.debug(book_obj.to_pretty_str)
+            
+            stats["updated"] += 1
+            logger.success(f"Обновлено: {book_obj.title}")
+            
+        except PydanticValidationError as e:
+            # Ошибки структуры (пропущенные поля, типы данных)
+            error_msg = " | ".join([f"{err['loc'][0]}: {err['msg']}" for err in e.errors()])
+            logger.warning(f"Ошибка валидации в {rel_path}: {error_msg}")
+            stats["errors"] += 1
+            stats["error_details"].append({"file": rel_path, "error": error_msg})
+            
+        except IntegrityError as e:
+            # Ошибки базы данных (NOT NULL, Unique и т.д.)
+            session.rollback()
+            error_msg = f"Ошибка базы данных (проверьте обязательные поля): {e.orig}"
+            logger.error(f"Ошибка записи в БД {rel_path}: {error_msg}")
+            stats["errors"] += 1
+            stats["error_details"].append({"file": rel_path, "error": "Ошибка структуры БД (пропущены поля?)"}) 
+            
+        except Exception as e:
+            session.rollback()
+            logger.error(f"Непредвиденная ошибка в {rel_path}: {e}")
+            stats["errors"] += 1
+
+    # Сбрасываем кэш статистики после успешной синхронизации
+    stats_cache.clear()
+
+    duration = round(time.time() - start_time, 2)
+    logger.info(f"Синхронизация окончена за {duration}с. Обновлено: {stats['updated']}, Ошибок: {stats['errors']}")
+    return stats
 
 ```
 
@@ -215,16 +1305,974 @@ def get_session():
 
 ### FILE: `src\web\router.py`
 ```python
+"""Роутер для основных страниц сайта."""
 
+from typing import Annotated, Any
+
+from fastapi import APIRouter, Depends, Request
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
+from sqlmodel import Session, func, select
+
+from src.core.database import get_session
+from src.core.logger import logger
+from src.modules.books.models import Book
+
+
+class StatsCache:
+    """Кеш статистики с главной страницы. Обновляется каждый раз после синхронизации."""
+    def __init__(self) -> None:
+        """Создаем пустой кеш статистики главной страницы."""
+        self._data: dict[str, Any] | None = None
+
+    def get(self) -> dict[str, Any] | None:
+        """Возвращаем текущий кеш статистики."""
+        return self._data
+
+    def set(self, data: dict[str, Any]) -> None:
+        """Обновление текущего кеша."""
+        self._data = data
+
+    def clear(self) -> None:
+        """Очистка текущего кеша."""
+        self._data = None
+
+stats_cache = StatsCache()
+
+router = APIRouter(tags=["Web"])
+templates = Jinja2Templates(directory="src/web/templates")
+SessionDep = Annotated[Session, Depends(get_session)]
+
+@router.get("/", response_class=HTMLResponse)
+async def index(request: Request, session: SessionDep) -> HTMLResponse:
+    """Подсчитывание общей статистики для главной страницы."""
+    
+    # Проверяем наличие данных в кэше
+    cached_stats = stats_cache.get()
+    if cached_stats:
+        logger.debug("Статистика взята из кеша.")
+        return templates.TemplateResponse(
+            "pages/index.html", {"request": request, "stats": cached_stats}
+        )
+
+    # Если кэша нет — считаем
+    total_books = session.exec(select(func.count()).select_from(Book)).one()
+    total_pages = session.exec(select(func.sum(Book.total))).one() or 0
+    avg_rating = session.exec(select(func.avg(Book.total_rating))).one() or 0
+    finished_books = session.exec(select(func.count()).where(Book.status == "finished")).one()
+    reading_books = session.exec(select(func.count()).where(Book.status == "reading")).one()
+
+    new_stats = {
+        "books": {
+            "total": total_books,
+            "pages": total_pages,
+            "avg": round(avg_rating, 1),
+            "finished": finished_books,
+            "reading": reading_books
+        }
+    }
+    logger.debug(f"Обновленная статистика - {new_stats}")
+    
+    # Обновляем кеш
+    stats_cache.set(new_stats)
+
+    return templates.TemplateResponse(
+        "pages/index.html", {"request": request, "stats": new_stats}
+    )
 ```
 
 ---
 
-### FILE: `src\web\static\css\input.css`
+### FILE: `src\web\static\css\style.css`
 ```css
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* --- ПЕРЕМЕННЫЕ --- */
+:root {
+    --primary: #6366f1; /* Indigo */
+    --primary-hover: #4f46e5;
+    --bg: #f8fafc;
+    --text-dark: #0f172a;
+    --text-muted: #64748b;
+    --white: #ffffff;
+    --border: #e2e8f0;
+    --shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+    --shadow-hover: 0 20px 25px -5px rgba(0,0,0,0.1);
+    --transition: all 0.2s ease;
+}
+
+/* --- СТРУКТУРА --- */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; }
+
+body {
+    font-family: 'Inter', sans-serif;
+    background-color: var(--bg);
+    color: var(--text-dark);
+    display: flex;
+    flex-direction: column;
+}
+
+/* --- НАВИГАЦИЯ --- */
+.navbar {
+    position: sticky; top: 0; z-index: 1000;
+    background: rgba(255,255,255,0.8); backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border); height: 72px; flex-shrink: 0;
+}
+.nav-container {
+    max-width: 1550px; margin: 0 auto; height: 100%;
+    display: flex; align-items: center; justify-content: space-between; padding: 0 24px;
+}
+.nav-logo { font-weight: 800; font-size: 1.35rem; text-decoration: none; color: var(--text-dark); letter-spacing: -1.2px; }
+.nav-logo span { color: var(--primary); }
+.nav-links { display: flex; gap: 32px; list-style: none; margin: 0; padding: 0; }
+.nav-links a { text-decoration: none; color: var(--text-muted); font-weight: 600; font-size: 0.95rem; transition: var(--transition); }
+.nav-links a:hover, .nav-links a.active { color: var(--primary); }
+.nav-links a.disabled { opacity: 0.3; cursor: not-allowed; }
+
+/* --- КОНТЕНТ --- */
+.main-content { flex: 1 0 auto; width: 100%; max-width: 1550px; margin: 0 auto; padding: 40px 24px; }
+
+/* --- КНОПКИ --- */
+.btn-primary {
+    background: var(--primary); color: white; border: none; padding: 12px 20px;
+    border-radius: 12px; font-weight: 700; cursor: pointer; display: inline-flex;
+    align-items: center; gap: 8px; text-decoration: none; transition: 0.2s;
+}
+.btn-primary:hover { background: var(--primary-hover); transform: translateY(-2px); }
+
+/* --- СОРТИРОВКА И ПЕРЕКЛЮЧАТЕЛЬ (ВОССТАНОВЛЕНО) --- */
+.dropdown { position: relative; }
+.sort-trigger { 
+    background: white; border: 1px solid var(--border); border-radius: 12px; 
+    padding: 12px 16px; cursor: pointer; display: flex; align-items: center; 
+    gap: 8px; font-family: inherit; font-weight: 500;
+}
+.dropdown-content { 
+    display: none; position: absolute; right: 0; top: 100%; background: white; 
+    min-width: 240px; border-radius: 12px; box-shadow: var(--shadow-hover); 
+    z-index: 1001; border: 1px solid var(--border); padding: 8px; 
+}
+.dropdown:hover .dropdown-content { display: block; }
+.dropdown-content a { color: var(--text-dark); padding: 10px; text-decoration: none; display: block; border-radius: 8px; font-size: 0.9rem; }
+.dropdown-content a:hover { background: #f1f5f9; color: var(--primary); }
+
+.order-toggle { 
+    display: flex; align-items: center; justify-content: center; 
+    width: 45px; height: 45px; background: white; border: 1px solid var(--border); 
+    border-radius: 12px; text-decoration: none; color: var(--text-muted); 
+    font-weight: 800; font-size: 1.1rem; transition: 0.2s;
+}
+.order-toggle:hover { border-color: var(--primary); color: var(--primary); background: #f5f3ff; }
+
+/* --- СПИСОК КНИГ --- */
+.books-list { display: flex; flex-direction: column; gap: 10px; }
+.list-header, .book-row {
+    display: grid;
+    /* 
+       Точная настройка 9 колонок (сумма должна быть стабильной):
+       60px   - Рейтинг
+       1fr    - Название (гибкое)
+       480px  - Аналитика (ужали на 20px для GR)
+       0.7fr  - Жанры (чуть меньше приоритет)
+       50px   - GR
+       55px   - Год
+       55px   - Стр.
+       100px  - Статус
+       50px   - Опс (иконка)
+    */
+    grid-template-columns: 60px minmax(0, 1fr) 480px minmax(0, 0.7fr) 50px 55px 55px 100px 50px;
+    align-items: center; 
+    gap: 15px;
+}
+.list-header { padding: 0 24px; margin-bottom: 10px; color: var(--text-muted); font-size: 0.7rem; font-weight: 800; text-transform: uppercase; }
+
+/* Уменьшим немного шрифт в матрице аналитики, чтобы она была компактнее */
+.matrix-value { font-size: 0.85rem; }
+.matrix-label { font-size: 0.6rem; }
+
+
+/* Защита от "ступенек": если текст слишком длинный, он превратится в многоточие */
+.row-title, .row-author {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block;
+}
+
+.row-title-block {
+    min-width: 0; /* Позволяет дочерним элементам сжиматься */
+    display: flex;
+    flex-direction: column;
+}
+
+.book-row {
+    background: white; border-radius: 20px; padding: 12px 24px;
+    text-decoration: none; color: inherit; transition: 0.2s;
+    border: 1px solid rgba(0,0,0,0.05); box-shadow: var(--shadow);
+}
+.book-row:hover { transform: translateX(8px); filter: brightness(0.97); }
+
+/* МАТРИЦА РЕЙТИНГОВ */
+.rating-matrix {
+    display: grid; grid-template-columns: repeat(10, 1fr); gap: 6px;
+    background: rgba(0,0,0,0.04); padding: 8px; border-radius: 14px;
+}
+.matrix-cell { display: flex; flex-direction: column; align-items: center; }
+.matrix-label { font-size: 0.65rem; text-transform: uppercase; font-weight: 800; opacity: 0.6; margin-bottom: 3px; }
+.matrix-value { font-size: 0.95rem; font-weight: 900; }
+
+/* ЖАНРЫ */
+.row-genres { display: flex; flex-wrap: wrap; gap: 6px; }
+.list-genre-tag {
+    background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.2); 
+    padding: 3px 10px; border-radius: 8px; font-size: 0.7rem; font-weight: 800; 
+    text-transform: uppercase; backdrop-filter: blur(4px);
+}
+
+/* ЯКОРЯ И ЦВЕТНАЯ ИКОНКА --- */
+.row-anchor {
+    display: flex; align-items: center; justify-content: center;
+    width: 44px; height: 44px; border-radius: 12px;
+    background: white; font-weight: 900; color: #000 !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1); border: 1px solid rgba(0,0,0,0.1);
+    text-decoration: none !important;
+}
+
+.obsidian-icon {
+    font-size: 1.2rem;
+    font-weight: 800;
+    color: var(--primary); /* Сделали иконку фиолетовой */
+    transition: var(--transition);
+}
+
+.obsidian-anchor:hover { border-color: var(--primary); }
+.obsidian-anchor:hover .obsidian-icon { transform: scale(1.2); color: var(--primary-hover); }
+
+/* --- ФУТЕР --- */
+.footer {
+    flex-shrink: 0; background: white; border-top: 1px solid var(--border);
+    padding: 30px 0; margin-top: auto;
+}
+.footer-inner { max-width: 1550px; margin: 0 auto; padding: 0 24px; display: flex; justify-content: space-between; align-items: center; opacity: 0.6; }
+
+.row-title { font-weight: 800; font-size: 1.15rem; }
+.row-author {
+    font-size: 0.85rem;
+    opacity: 0.8;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 180px; /* Ограничим ширину имени автора, чтобы страна всегда была видна */
+}
+.status-pill.dynamic-pill { background: rgba(0,0,0,0.08) !important; padding: 4px 10px; border-radius: 8px; font-size: 0.7rem; font-weight: 800; text-transform: uppercase; }
+
+/* Кнопка страницы */
+.page-button {
+    width: 40px !important; /* Принудительно фиксируем ширину */
+    height: 45px;
+    font-weight: 700;
+    font-size: 0.95rem;
+    border-radius: 12px;
+}
+
+/* Активная страница (максимальный приоритет) */
+.page-button.active {
+    background: var(--primary) !important; /* Используем background вместо background-color */
+    color: #ffffff !important;
+    border-color: var(--primary) !important;
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3); /* Добавим легкое свечение для красоты */
+}
+
+/* Эффект пульсации для кнопок во время запроса HTMX */
+.htmx-request {
+    opacity: 0.6;
+    pointer-events: none;
+    filter: grayscale(1);
+}
+```
+
+---
+
+### FILE: `src\web\templates\layout.html`
+```html
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Obsidian Analytics</title>
+    <link rel="icon" href="https://fav.farm/🪐">
+    
+    <!-- Подключаем современный шрифт Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="{{ url_for('static', path='css/style.css') }}">
+    <script src="https://unpkg.com/htmx.org@2.0.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="/" class="nav-logo">
+                🪐 Life<span>Dash</span>
+            </a>
+            <ul class="nav-links">
+                <li><a href="/books/" class="active">Книги</a></li>
+                <li><a href="#" class="disabled">Игры</a></li>
+                <li><a href="#" class="disabled">Кино</a></li>
+                <li><a href="#" class="disabled">Итоги</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="footer">
+        <div class="footer-inner">
+            <div class="footer-logo">💠 Obsidian<span>Dash</span></div>
+            <div class="footer-links">
+                <a href="#" onclick="window.scrollTo({top: 0, behavior: 'smooth'}); return false;">Наверх ↑</a>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Анимация появления контента
+        document.body.addEventListener('htmx:afterOnLoad', function() {
+            console.log('Content loaded');
+        });
+    </script>
+</body>
+</html>
+```
+
+---
+
+### FILE: `src\web\templates\components\sync_report.html`
+```html
+<div style="padding: 1rem; margin-bottom: 2rem; border-radius: 8px; border: 1px solid; 
+    {% if stats.errors > 0 %} background-color: #fff9db; border-color: #fab005; color: #856404; 
+    {% else %} background-color: #ebfbee; border-color: #40c057; color: #2b8a3e; {% endif %}">
+    
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+            <strong>Синхронизация завершена!</strong><br>
+            Найдено: {{ stats.total }} | 
+            Обновлено: {{ stats.updated }} | 
+            Удалено (отсутствующих): {{ stats.deleted }} |
+            Ошибок: {{ stats.errors }}
+        </div>
+        <button onclick="this.parentElement.parentElement.remove()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: inherit;">&times;</button>
+    </div>
+
+    {% if stats.errors > 0 %}
+    <div style="margin-top: 1rem; font-size: 0.85rem;">
+        <strong>Список проблемных файлов (кликните, чтобы открыть в Obsidian):</strong>
+        <ul style="margin-top: 0.5rem; padding-left: 1.2rem;">
+            {% for error in stats.error_details %}
+            <li style="margin-bottom: 5px;">
+                <a href="obsidian://open?vault=Knowledge_Base&file={{ error.file | urlencode }}" 
+                   style="color: #e67e22; font-weight: bold; text-decoration: underline;">
+                    {{ error.file }}
+                </a>: {{ error.error }}
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+</div>
+```
+
+---
+
+### FILE: `src\web\templates\pages\books.html`
+```html
+{% extends "layout.html" %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+    <h1 style="font-size: 3rem; font-weight: 800; margin: 0; letter-spacing: -2px;">Библиотека</h1>
+
+    <!-- ФОРМА ПОИСКА -->
+    <form method="get" action="/books/" style="position: relative; flex: 1; max-width: 400px;">
+        <input type="text" name="q" value="{{ current_search }}"
+               hx-get="/books/" 
+                hx-trigger="keyup changed delay:500ms" 
+                hx-target=".books-list" 
+                hx-select=".books-list"
+               placeholder="Поиск по названию, автору или серии..." 
+               style="
+                    width: 100%;
+                    padding: 10px 15px 10px 40px;
+                    border-radius: 12px;
+                    border: 1px solid var(--border);
+                    font-family: inherit;
+                    font-size: 0.9rem;
+                    outline: none;
+                    transition: var(--transition);
+               "
+               onfocus="this.style.borderColor='var(--primary)';"
+               onblur="this.style.borderColor='var(--border)';"
+        >
+        <!-- Иконка лупы -->
+        <span style="position: absolute; left: 15px; top: 50%; transform: translateY(-50%); opacity: 0.4;">🔍</span>
+        
+        <!-- Сохраняем сортировку при поиске -->
+        <input type="hidden" name="sort" value="{{ current_sort }}">
+        <input type="hidden" name="order" value="{{ current_order }}">
+    </form>
+    
+    <div style="display: flex; gap: 10px; align-items: center;">
+        <div class="dropdown">
+            <button class="sort-trigger">
+                <span>📊 Сортировка:</span>
+                <strong>{{ sort_label }}</strong>
+                <span style="font-size: 0.6rem; margin-left: 5px;">▼</span>
+            </button>
+            <div class="dropdown-content">
+                {% for key, label in labels.items() %}
+                <a href="?sort={{ key }}&order={{ current_order }}&page=1" class="{{ 'active' if current_sort == key }}">
+                    {{ label }}
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+
+        {% set next_order = 'asc' if current_order == 'desc' else 'desc' %}
+        <!-- Кнопка направления теперь имеет класс order-toggle для рамки -->
+        <a href="?sort={{ current_sort }}&order={{ next_order }}" class="order-toggle" title="Изменить направление">
+            {{ '↓' if current_order == 'desc' else '↑' }}
+        </a>
+
+        <!-- Кнопнка обычной синхронизации -->
+        <button class="btn-primary" style="padding: 10px 16px; font-size: 0.9rem;" 
+                hx-post="/books/sync" hx-target="#sync-report">
+            <span>🔄</span> Синхронизировать
+        </button>
+
+        <!-- Кнопка принудительного полного обновления -->
+        <button class="order-toggle" 
+                style="width: 45px; font-size: 0.9rem;" 
+                hx-post="/books/sync?force=true" 
+                hx-target="#sync-report"
+                hx-confirm="Перечитать ВСЕ файлы заметок заново?"
+                title="Полное обновление">
+            ⚡
+        </button>
+    </div>
+</div>
+
+<div id="sync-report"></div>
+
+<div class="books-list">
+    <div class="list-header">
+        <span>Рейт.</span>
+        <span>Название</span>
+        <span style="text-align: center;">Аналитика</span>
+        <span>Жанры</span>
+        <span style="text-align: right;">GR</span>
+        <span style="text-align: right;">Год</span>
+        <span style="text-align: right;">Стр.</span>
+        <span style="text-align: center;">Статус</span>
+        <span></span>
+    </div>
+
+    {% for book in books %}
+    <a href="/books/{{ book.id }}" class="book-row" style="background-color: {{ book.bg_color }}; color: {{ book.text_color }};">
+        
+        <div class="row-anchor">{{ book.total_rating|int }}</div>
+
+        <div class="row-title-block">
+            <!-- Название книги -->
+            <span class="row-title">{{ book.title }}</span>
+            
+            <!-- Блок автора и страны -->
+            <div style="display: flex; align-items: center; gap: 8px; margin-top: 2px;">
+                <span class="row-author">{{ book.author }}</span>
+                
+                {% if book.country_author and book.country_author != "Unknown" %}
+                <span style="
+                    font-size: 0.65rem; 
+                    font-weight: 800; 
+                    text-transform: uppercase; 
+                    padding: 1px 6px; 
+                    background: rgba(0,0,0,0.1); 
+                    border-radius: 4px; 
+                    opacity: 0.8;
+                    letter-spacing: 0.5px;
+                ">
+                    {{ book.country_author }}
+                </span>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="rating-matrix">
+            {% set ratings_data = [
+                ('Герои', book.rating_characters), ('Сюжет', book.rating_plot), 
+                ('Объем', book.rating_size), ('Слог', book.rating_prose),
+                ('Финал', book.rating_ending), ('Глуб', book.rating_depth),
+                ('Атм', book.rating_atmosphere), ('Повт', book.rating_rereadability),
+                ('Ожид', book.rating_expected_real), ('Рек', book.rating_recommend)
+            ] %}
+            {% for label, val in ratings_data %}
+            <div class="matrix-cell">
+                <span class="matrix-label">{{ label }}</span>
+                <span class="matrix-value">{{ val|round(1) }}</span>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="row-genres">
+            {% for genre in book.primary_genres_list_ru %}
+            <div class="list-genre-tag">
+                {{ genre }}
+            </div>
+            {% endfor %}
+        </div>
+
+        <div style="text-align: right; font-weight: 800; opacity: 0.9;">
+            {{ book.good_reads if book.good_reads else "—" }}
+        </div>
+
+        <div style="text-align: right; font-size: 0.95rem; font-weight: 700;">
+            {{ book.year }}
+        </div>
+        <div class="row-meta" style="text-align: right;"><strong> {{ book.total }} </strong></div>
+        <div style="display: flex; justify-content: center;"><span class="status-pill dynamic-pill"> {{ book.status_ru }} </span></div>
+
+        <div style="display: flex; justify-content: flex-end;">
+            <object>
+                <a href="obsidian://open?vault=Knowledge_Base&file={{ book.file_path | urlencode }}" 
+                   class="row-anchor obsidian-anchor" title="Открыть в Obsidian">
+                   <!-- Вместо эмодзи используем стилизованный символ -->
+                   <span class="obsidian-icon">↗</span>
+                </a>
+            </object>
+        </div>
+    </a>
+    {% endfor %}
+
+    <!-- Блок Пагинации -->
+    {% if total_pages > 1 %}
+    <div style="margin-top: 4rem; display: flex; justify-content: center; align-items: center; gap: 0.5rem;">
+        
+        <!-- Первая страница -->
+        {% if current_page > 3 %}
+            <a href="?page=1&sort={{ current_sort }}&order={{ current_order }}" 
+            class="order-toggle" style="width: auto; padding: 0 12px; font-weight: 800;">« 1</a>
+            <span style="color: #cbd5e1; margin: 0 5px;">...</span>
+        {% endif %}
+
+        <!-- Назад -->
+        {% if current_page > 1 %}
+            <a href="?page={{ current_page - 1 }}&sort={{ current_sort }}&order={{ current_order }}" 
+            class="order-toggle" style="width: auto; padding: 0 15px;">‹</a>
+        {% endif %}
+
+        <!-- Цифры -->
+        {% for p in page_numbers %}
+            <a href="?page={{ p }}&sort={{ current_sort }}&order={{ current_order }}" 
+            class="order-toggle page-button {{ 'active' if p|int == current_page|int else '' }}">
+                {{ p }}
+            </a>
+        {% endfor %}
+
+        <!-- Вперед -->
+        {% if current_page < total_pages %}
+            <a href="?page={{ current_page + 1 }}&sort={{ current_sort }}&order={{ current_order }}" 
+            class="order-toggle" style="width: auto; padding: 0 15px;">›</a>
+        {% endif %}
+
+        <!-- Последняя страница -->
+        {% if current_page < total_pages - 2 %}
+            <span style="color: #cbd5e1; margin: 0 5px;">...</span>
+            <a href="?page={{ total_pages }}&sort={{ current_sort }}&order={{ current_order }}" 
+            class="order-toggle" style="width: auto; padding: 0 12px; font-weight: 800;">{{ total_pages }} »</a>
+        {% endif %}
+
+    </div>
+
+    <!-- Текст статистики -->
+    <div style="text-align: center; margin-top: 1.5rem; font-size: 0.75rem; color: #94a3b8; font-weight: 800; text-transform: uppercase; letter-spacing: 1px;">
+        Показано {{ showing_from }}–{{ showing_to }} из {{ total_count }} книг
+    </div>
+
+    {% endif %}
+
+</div>
+{% endblock %}
+```
+
+---
+
+### FILE: `src\web\templates\pages\book_detail.html`
+```html
+{% extends "layout.html" %}
+
+{% block content %}
+<div style="max-width: 900px; margin: 0 auto;">
+    <a href="/books/" style="display: inline-block; margin-bottom: 2rem; color: #636e72; text-decoration: none; font-weight: 500;">
+        ← Вернуться в библиотеку
+    </a>
+
+    <div class="book-card" style="padding: 0; overflow: hidden; border-radius: 24px; background: white;">
+        <!-- Hero Section -->
+        <div style="background-color: {{ book.bg_color }}; color: {{ book.text_color }}; padding: 4rem 3rem;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                <div style="flex: 1;">
+                    <!-- СЕРИЯ КНИГ (если есть) -->
+                    {% if book.series %}
+                    <div style="font-size: 0.8rem; font-weight: 800; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 0.5rem; opacity: 0.7;">
+                        Серия: {{ book.series }}
+                    </div>
+                    {% endif %}
+
+                    <!-- Жанры -->
+                    <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 1.5rem;">
+                        {% for genre in book.detailed_genres_list_ru %}
+                            <div style="background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.2); padding: 4px 12px; border-radius: 8px; display: flex; align-items: center; gap: 8px; backdrop-filter: blur(4px);">
+                                <span style="font-weight: 800; text-transform: uppercase; font-size: 0.7rem; letter-spacing: 0.5px;">
+                                    {{ genre.name }}
+                                </span>
+                                {% if genre.sub %}
+                                <span style="opacity: 0.8; font-size: 0.75rem; border-left: 1px solid rgba(255,255,255,0.3); padding-left: 8px; font-style: italic;">
+                                    {{ genre.sub }}
+                                </span>
+                                {% endif %}
+                            </div>
+                        {% endfor %}
+                    </div>
+
+                    <!-- Название и Автор -->
+                    <h1 style="font-size: 3.5rem; margin: 0; letter-spacing: -2px; line-height: 1.1;">{{ book.title }}</h1>
+                    <p style="font-size: 1.5rem; opacity: 0.9; margin-top: 0.5rem;">
+                        {{ book.author }}, 
+                        {{ book.year }}
+                    </p>
+                </div>
+                
+<!-- ПРАВАЯ ЧАСТЬ: РЕЙТИНГИ -->
+<div style="text-align: right; margin-left: 2rem; display: flex; flex-direction: column; align-items: flex-end; gap: 1.2rem;">
+    
+    <!-- Твой личный рейтинг (Компактный акцент) -->
+    <div style="
+        background: rgba(255,255,255,0.12); 
+        padding: 15px 25px; 
+        border-radius: 20px; 
+        border: 1px solid rgba(255,255,255,0.2);
+        backdrop-filter: blur(8px);
+        text-align: center;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    ">
+        <div style="font-size: 3.2rem; font-weight: 900; line-height: 1;">{{ book.total_rating|int }}</div>
+        <div style="
+            text-transform: uppercase; 
+            font-size: 0.6rem; 
+            font-weight: 800; 
+            opacity: 0.8; 
+            letter-spacing: 1px;
+            margin-top: 4px;
+        ">My Score</div>
+    </div>
+
+    <!-- Рейтинг GoodReads (Минималистичный) -->
+    <div style="text-align: center; padding-right: 10px; opacity: 0.7;">
+        <div style="font-size: 1.5rem; font-weight: 900; line-height: 1;">{{ book.good_reads or '—' }}</div>
+        <div style="
+            text-transform: uppercase; 
+            font-size: 0.5rem; 
+            font-weight: 800; 
+            letter-spacing: 1px; 
+            margin-top: 2px;
+        ">GoodReads</div>
+    </div>
+</div>
+            </div>
+        </div>
+
+        <div style="padding: 3rem;">
+            <!-- Сетка характеристик -->
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 2rem; margin-bottom: 3rem; padding-bottom: 2rem; border-bottom: 1px solid #eee;">
+                <div>
+                    <h4 style="margin: 0; color: #a4b0be; text-transform: uppercase; font-size: 0.75rem; font-weight: 800; letter-spacing: 1px;">Метаданные</h4>
+                    <ul style="list-style: none; padding: 0; margin: 1rem 0;">
+                        <li style="margin-bottom: 5px;"><strong>Статус:</strong> {{ book.status_ru }}</li>
+                        <li style="margin-bottom: 5px;"><strong>Формат:</strong> {{ book.format_ru }}</li>
+                        <li style="margin-bottom: 5px;"><strong>Язык:</strong> {{ book.language }}</li>
+                        <li style="margin-bottom: 5px;"><strong>Страна:</strong> {{ book.country_author }}</li>
+                        {% if book.series %}
+                        <li style="margin-bottom: 5px;"><strong>Серия:</strong> {{ book.series }}</li>
+                        {% endif %}
+                        {% if book.isbn %}
+                        <li style="margin-bottom: 5px;"><strong>ISBN:</strong> {{ book.isbn }}</li>
+                        {% endif %}
+                    </ul>
+                </div>
+                <div>
+                    <h4 style="margin: 0; color: #a4b0be; text-transform: uppercase; font-size: 0.75rem; font-weight: 800; letter-spacing: 1px;">Объем</h4>
+                    <p style="font-size: 1.25rem; margin: 1rem 0 0.5rem 0;"><strong>{{ book.total }}</strong> страниц</p>
+                </div>
+            </div>
+
+            <!-- Секция периодов чтения -->
+            <div style="margin-bottom: 3rem;">
+                <h2 style="font-size: 1.5rem; letter-spacing: -0.5px; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 10px;">
+                    <span>⏳</span> История чтения и темп
+                </h2>
+
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem;">
+                    {% for session in book.reading_sessions %}
+                    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 16px; padding: 1.5rem; position: relative; overflow: hidden;">
+                        
+                        <!-- Номер сессии на фоне -->
+                        <div style="position: absolute; right: 15px; top: 5px; font-size: 5rem; font-weight: 900; color: rgba(0,0,0,0.03); z-index: 0; pointer-events: none;">
+                            {{ session.number }}
+                        </div>
+
+                        <div style="position: relative; z-index: 1;">
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 1rem;">
+                                <span style="font-size: 0.7rem; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8;">Сессия {{ session.number }}</span>
+                                {% if session.finish == "в процессе" %}
+                                    <span style="background: {{ book.bg_color }}; color: {{ book.text_color }}; padding: 2px 8px; border-radius: 4px; font-size: 0.65rem; font-weight: 800;">ЧИТАЮ</span>
+                                {% endif %}
+                            </div>
+
+                            <div style="display: flex; gap: 15px; align-items: center; margin-bottom: 1rem;">
+                                <div>
+                                    <div style="font-size: 0.95rem; font-weight: 700;">{{ session.start }}</div>
+                                    <div style="font-size: 0.65rem; color: #94a3b8; text-transform: uppercase;">Начало</div>
+                                </div>
+                                <div style="color: #cbd5e1;">→</div>
+                                <div>
+                                    <div style="font-size: 0.95rem; font-weight: 700; {% if session.finish == 'в процессе' %}color: var(--primary);{% endif %}">
+                                        {{ session.finish }}
+                                    </div>
+                                    <div style="font-size: 0.65rem; color: #94a3b8; text-transform: uppercase;">Конец</div>
+                                </div>
+                            </div>
+
+                            {% if session.days %}
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding-top: 1rem; border-top: 1px dashed #e2e8f0;">
+                                <div>
+                                    <div style="font-size: 1.2rem; font-weight: 800; color: var(--primary);">{{ session.days }}</div>
+                                    <div style="font-size: 0.65rem; color: #94a3b8; font-weight: 700; text-transform: uppercase;">Дней</div>
+                                </div>
+                                <div>
+                                    <div style="font-size: 1.2rem; font-weight: 800; color: #10b981;">{{ session.pages_per_day }}</div>
+                                    <div style="font-size: 0.65rem; color: #94a3b8; font-weight: 700; text-transform: uppercase;">Стр/День</div>
+                                </div>
+                            </div>
+                            {% else %}
+                            <div style="font-size: 0.75rem; color: #cbd5e1; font-style: italic; padding-top: 1rem; border-top: 1px dashed #e2e8f0;">
+                                Аналитика темпа недоступна
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Секция 10 рейтинговых параметров -->
+            <div style="margin-bottom: 4rem;">
+                <h2 style="font-size: 1.5rem; letter-spacing: -0.5px; margin-bottom: 2rem; display: flex; align-items: center; gap: 10px;">
+                    <span>📊</span> Рейтинговый профиль
+                </h2>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4rem; align-items: center;">
+                    
+                    <!-- Левая колонка: График-паутинка -->
+                    <div style="background: #f8fafc; padding: 2rem; border-radius: 24px; position: relative;">
+                        <canvas id="bookRadarChart"></canvas>
+                    </div>
+
+                    <!-- Правая колонка: Список рейтингов с полосками -->
+                    <div style="display: flex; flex-direction: column; gap: 1.2rem;">
+                        {% for item in book.ratings_map %}
+                        <div class="rating-item">
+                            <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 6px;">
+                                <span style="font-size: 0.75rem; font-weight: 800; color: #94a3b8; text-transform: uppercase;">{{ item.label }}</span>
+                                <span style="font-size: 1rem; font-weight: 800;">{{ item.value|round(1) }}</span>
+                            </div>
+                            <div style="height: 6px; background: #e2e8f0; border-radius: 10px; overflow: hidden;">
+                                <div style="width: {{ item.percent }}%; height: 100%; background: {{ book.bg_color }};"></div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Контент из Obsidian -->
+            <div class="prose">
+                {% if content.impression %}
+                <div style="margin-bottom: 3rem;">
+                    <h2 style="font-size: 2rem; letter-spacing: -1px; margin-bottom: 1rem; display: flex; align-items: center; gap: 10px;">
+                        <span>❤️</span> Моё впечатление
+                    </h2>
+                    <div style="font-size: 1.15rem; line-height: 1.8; color: #2d3436; white-space: pre-wrap;">{{ content.impression }}</div>
+                </div>
+                {% endif %}
+
+                {% if content.quotes %}
+                <div>
+                    <h2 style="font-size: 2rem; letter-spacing: -1px; margin-bottom: 1rem; display: flex; align-items: center; gap: 10px;">
+                        <span>📝</span> Цитаты
+                    </h2>
+                    <div style="background: #f8fafc; border-left: 5px solid var(--primary); padding: 2.5rem; font-style: italic; border-radius: 0 16px 16px 0; font-size: 1.1rem; line-height: 1.7; white-space: pre-wrap;">{{ content.quotes }}</div>
+                </div>
+                {% endif %}
+            </div>
+
+            <div style="margin-top: 5rem; text-align: center; padding-top: 2.5rem; border-top: 1px solid #eee;">
+                <a href="obsidian://open?vault=Knowledge_Base&file={{ book.file_path | urlencode }}" 
+                   class="btn-primary" style="text-decoration: none; padding: 12px 32px;">
+                    Открыть оригинал в Obsidian
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Функция инициализации графика
+function initChart() {
+    const canvas = document.getElementById('bookRadarChart');
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    const bookColor = '{{ book.bg_color }}';
+    
+    // Проверка, не создан ли уже график (актуально для HTMX)
+    if (window.myRadarChart) {
+        window.myRadarChart.destroy();
+    }
+
+    window.myRadarChart = new Chart(ctx, {
+        type: 'radar',
+        data: {
+            labels: [{% for item in book.ratings_map %}'{{ item.label }}'{% if not loop.last %}, {% endif %}{% endfor %}],
+            datasets: [{
+                data: [{% for item in book.ratings_map %}{{ item.value }}{% if not loop.last %}, {% endif %}{% endfor %}],
+                fill: true,
+                backgroundColor: bookColor + '33',
+                borderColor: bookColor,
+                borderWidth: 2,
+                pointBackgroundColor: bookColor,
+                pointBorderColor: '#fff',
+                pointRadius: 3
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            scales: {
+                r: {
+                    min: 0,
+                    max: 10,
+                    beginAtZero: true,
+                    ticks: { display: false, stepSize: 2 },
+                    pointLabels: {
+                        font: { size: 10, weight: 'bold' },
+                        color: '#64748b'
+                    },
+                    grid: { color: '#e2e8f0' },
+                    angleLines: { color: '#e2e8f0' }
+                }
+            },
+            plugins: {
+                legend: { display: false }
+            }
+        }
+    });
+}
+
+// Запуск при обычной загрузке
+if (document.readyState === 'complete') {
+    initChart();
+} else {
+    window.addEventListener('load', initChart);
+}
+
+// Запуск для HTMX (если вы переходите на страницу через hx-get)
+document.body.addEventListener('htmx:afterOnLoad', function() {
+    initChart();
+});
+</script>
+
+{% endblock %}
+```
+
+---
+
+### FILE: `src\web\templates\pages\index.html`
+```html
+{% extends "layout.html" %}
+
+{% block content %}
+<div style="display: flex; align-items: center; gap: 2rem; margin-bottom: 4rem;">
+    <!-- Тот самый "смайлик" или иконка, но в более строгом стиле -->
+    <div style="font-size: 4rem; background: white; width: 100px; height: 100px; display: flex; align-items: center; justify-content: center; border-radius: 24px; box-shadow: var(--shadow);">
+        🪐
+    </div>
+    <div>
+        <h1 style="font-size: 3.5rem; font-weight: 800; margin: 0; letter-spacing: -2px;">Life Dash</h1>
+        <div style="display: flex; gap: 10px; margin-top: 5px;">
+            <span class="tag" style="background: #f1f5f9; color: #475569;">Personal Dashboard</span>
+        </div>
+    </div>
+</div>
+
+<div class="stats-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 2rem;">
+    
+    <!-- Модуль Книги: Расширенная статистика -->
+    <div class="stat-card" style="background: white; padding: 2rem; border-radius: 24px; border: 1px solid #e2e8f0; box-shadow: var(--shadow);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+            <h2 style="margin: 0; font-size: 1.5rem; font-weight: 700;">📚 Книги</h2>
+            <a href="/books/" class="btn-primary" style="padding: 6px 14px; font-size: 0.8rem;">Открыть</a>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+            <div>
+                <span style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">Всего</span>
+                <p style="font-size: 2rem; font-weight: 800; margin: 0;">{{ stats.books.total }}</p>
+            </div>
+            <div>
+                <span style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">Средний балл</span>
+                <p style="font-size: 2rem; font-weight: 800; margin: 0; color: #f59e0b;">{{ stats.books.avg }}</p>
+            </div>
+            <div style="grid-column: span 2; background: #f8fafc; padding: 1rem; border-radius: 12px; display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <span style="font-size: 0.8rem; color: var(--text-muted);">Прочитано страниц:</span>
+                    <strong style="margin-left: 5px;">{{ stats.books.pages }}</strong>
+                </div>
+                <div style="text-align: right;">
+                    <span style="font-size: 0.8rem; color: var(--text-muted);">В процессе:</span>
+                    <strong style="margin-left: 5px; color: var(--primary);">{{ stats.books.reading }}</strong>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Заглушки для будущих модулей (чтобы сетка не была пустой) -->
+    <div style="background: rgba(255,255,255,0.4); border: 2px dashed #e2e8f0; padding: 2rem; border-radius: 24px; display: flex; flex-direction: column; justify-content: center; align-items: center; color: #cbd5e1;">
+        <span style="font-size: 2rem; margin-bottom: 1rem;">🎮</span>
+        <span style="font-weight: 600; font-size: 1.1rem;">Игры</span>
+        <span style="font-size: 0.8rem;">Модуль в разработке</span>
+    </div>
+
+    <div style="background: rgba(255,255,255,0.4); border: 2px dashed #e2e8f0; padding: 2rem; border-radius: 24px; display: flex; flex-direction: column; justify-content: center; align-items: center; color: #cbd5e1;">
+        <span style="font-size: 2rem; margin-bottom: 1rem;">🎬</span>
+        <span style="font-weight: 600; font-size: 1.1rem;">Кино</span>
+        <span style="font-size: 0.8rem;">Модуль в разработке</span>
+    </div>
+</div>
+{% endblock %}
 ```
 
 ---

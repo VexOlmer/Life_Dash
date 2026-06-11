@@ -17,6 +17,8 @@ ENV/
 *.egg-info/
 dist/
 build/
+.ruff_cache/
+.mypy_cache/
 
 # IDE and editors
 .vscode/
@@ -38,3 +40,4 @@ Thumbs.db
 # Local configuration
 config.local.*
 *.local.*
+project_snapshot.txt

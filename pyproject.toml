@@ -12,55 +12,118 @@ packages = [
 python = "^3.12"
 
 # Бэкенд и Веб
-fastapi = "^0.115.0"
-uvicorn = "^0.34.0"
+fastapi = {extras = ["all"], version = "^0.115.0"} # extras ["all"] уже включает uvicorn и python-multipart
 jinja2 = "^3.1.5"
 pydantic-settings = "^2.7.0"
+python-multipart = "^0.0.12"
 
 # База данных
-sqlmodel = "^0.0.34"
-sqlalchemy = "^2.0.36"
-alembic = "^1.14.0"           # Миграции базы данных
-aiosqlite = "^0.20.0"         # Асинхронный драйвер для SQLite
+sqlmodel = "^0.0.22"
 
 # Аналитика и данные
 plotly = "^6.0.0"
 pandas = "^2.2.3"
 numpy = "^2.1.3"
 python-dateutil = "^2.9.0"
-python-frontmatter = "^1.1.0"   # Для парсинга Markdown Obsidian
+python-frontmatter = "^1.1.0"
+pyyaml = "^6.0.2"
 
 # Утилиты
 loguru = "^0.7.2"
-typer = {extras = ["all"], version = "^0.15.1"}     # CLI интерфейс
+typer = {extras = ["all"], version = "^0.15.1"}     # Для работы CLI
+alembic = "^1.18.4"
 
 [tool.poetry.group.dev.dependencies]
-# Линтеры и форматирование
-black = "^24.10.0"
-isort = "^5.13.2"
-flake8 = "^7.1.1"
+# Ruff заменяет flake8, isort и black
+ruff = "^0.8.0"
 mypy = "^1.13.0"
 
 # Тестирование
 pytest = "^8.3.4"
 pytest-asyncio = "^0.25.0"
-httpx = "^0.28.1"             # Нужен для тестирования эндпоинтов FastAPI
+pytest-cov = "^6.0.0"        # Отчеты о покрытии тестами
+httpx = "^0.28.1"            # Тестирование эндпоинтов FastAPI
 
 [build-system]
 requires = ["poetry-core>=2.0.0"]
 build-backend = "poetry.core.masonry.api"
 
-# --- Настройки вспомогательных инструментов ---
+# --- Настройки Ruff ---
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+exclude = ["migrations"]
 
+[tool.ruff.lint]
+# E, F - стандартные правила Flake8
+# I - правила Isort (сортировка импортов)
+# UP - рекомендации по обновлению синтаксиса до Python 3.12
+# B - Bugbear (поиск вероятных багов)
+# D - проверка документации (Docstrings)
+# N - проверка именования (PEP8/Google naming)
+# ANN - проверка аннотаций типов
+select = ["E", "F", "I", "UP", "B", "D", "N", "ANN"]
+
+# Убираем неудобные правила форматирования docstring
+# D202 - пустая строка после docstring
+# D208 - отступы в docstring
+# D212 - многострочный docstring начинается с первой строки
+# D214 - единый стиль отступов (видимо конфликтует с D202)
+# E501 - максимальная длина строки (игронирурется очень редко, когда строка 81-85 символов)
+ignore = ["D202", "D208", "D212", "D214", "E501"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+# --- Настройки Pytest ---
 [tool.pytest.ini_options]
 pythonpath = ["."]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+# Автоматический запуск coverage для папки src
+addopts = "--cov=src --cov-report=term-missing"
 
-[tool.black]
-line-length = 88
-target-version = ['py312']
+[tool.mypy]
+python_version = "3.12"
+strict = true
+explicit_package_bases = true
+mypy_path = "."
+exclude = ["migrations"]
 
-[tool.isort]
-profile = "black"
-line_length = 88
+# Упрощаем работу с библиотеками без типов (Loguru, python-frontmatter)
+ignore_missing_imports = true
+
+# Позволяет mypy понимать модели Pydantic и SQLModel более точно
+plugins = [
+  "pydantic.mypy"
+]
+
+# Чтобы mypy не ругался на отсутствие __init__.py в каждой папке
+namespace_packages = true
+
+# Рекомендуется для FastAPI: не ругаться на декораторы без типов
+disallow_subclassing_any = false
+disallow_untyped_decorators = false
+
+
+
+# --- Команды запуска ---
+
+# poetry run ruff check --fix .
+# poetry run ruff format .
+
+# poetry run mypy .\src\
+
+# poetry run pytest
+
+# Одновременная проверка двумя линтерами
+# poetry run ruff check . ; poetry run mypy src
+
+
+# --- Alembic ---
+# poetry run alembic revision --autogenerate -m "text commit"
+# poetry run alembic upgrade head

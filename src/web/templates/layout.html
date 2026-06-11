@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Obsidian Analytics</title>
+    <link rel="icon" href="https://fav.farm/🪐">
+    
+    <!-- Подключаем современный шрифт Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="{{ url_for('static', path='css/style.css') }}">
+    <script src="https://unpkg.com/htmx.org@2.0.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="/" class="nav-logo">
+                🪐 Life<span>Dash</span>
+            </a>
+            <ul class="nav-links">
+                <li><a href="/books/" class="active">Книги</a></li>
+                <li><a href="#" class="disabled">Игры</a></li>
+                <li><a href="#" class="disabled">Кино</a></li>
+                <li><a href="#" class="disabled">Итоги</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="footer">
+        <div class="footer-inner">
+            <div class="footer-logo">💠 Obsidian<span>Dash</span></div>
+            <div class="footer-links">
+                <a href="#" onclick="window.scrollTo({top: 0, behavior: 'smooth'}); return false;">Наверх ↑</a>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Анимация появления контента
+        document.body.addEventListener('htmx:afterOnLoad', function() {
+            console.log('Content loaded');
+        });
+    </script>
+</body>
+</html>
