@@ -55,6 +55,13 @@ class BookTransformer:
                     detected_cover = str(potential_file.relative_to(vault_path))
                     break
 
+        log_entries = meta.get("read_log", [])
+        if isinstance(log_entries, list):
+            # Склеиваем записи через специальный разделитель ||
+            read_log_str = " || ".join([str(e) for e in log_entries])
+        else:
+            read_log_str = str(log_entries) if log_entries else None
+
         # Извлекаем все данные из метадаты, валидация автоматическая
         return Book(
             title=meta.get("title", file_path.stem),
@@ -70,8 +77,9 @@ class BookTransformer:
             format=meta.get("format"),
             language=meta.get("language"),
             good_reads=meta.get("good_reads"),
-            started=str(meta.get("started", "")) if meta.get("started") else None,
-            finished=str(meta.get("finished", "")) if meta.get("finished") else None,
+            
+            read_log=read_log_str, 
+
             bg_color=str(meta.get("bg_color", "#ffffff")),
             text_color=str(meta.get("text_color", "#000000")),
             cover=detected_cover,

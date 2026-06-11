@@ -100,6 +100,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 app.mount("/static", StaticFiles(directory="src/web/static"), name="static")
+app.mount("/vault", StaticFiles(directory=str(settings.OBSIDIAN_VAULT_PATH)), name="vault")
 
 app.include_router(web_router)    # Главная страница (/)
 app.include_router(books_router)  # Модуль книг (/books)
@@ -172,7 +173,7 @@ class BaseRepository(Generic[T]):
         
         # Мы предполагаем, что у всех моделей будет поле file_path
         statement = select(self.model_type).where(
-            self.model_type.file_path == relative_path  # type: ignore
+            self.model_type.file_path == relative_path # type: ignore
         )
         return self.session.exec(statement).first()
 
@@ -223,7 +224,7 @@ class BaseRepository(Generic[T]):
             Returns:
                 list[str] - Список всех путей файлов
         """
-        statement = select(self.model_type.file_path)
+        statement = select(self.model_type.file_path) # type: ignore
         return self.session.exec(statement).all()
 ```
 
@@ -361,6 +362,7 @@ class Settings(BaseSettings):
     SERIES_PATH: str = "notes/movies_series/series"
     DAILY_PATH: str = "periodic/daily"
     WEEKLY_PATH: str = "periodic/weekly"
+    COVERS_BOOKS_PATH: str = "files/covers/books"
 
     DATABASE_URL: str = "sqlite:///./data/db.sqlite"
 
@@ -556,6 +558,9 @@ class Book(SQLModel, table=True):
     # Цвета фона и текста
     bg_color: str = Field(default="#ffffff")
     text_color: str = Field(default="#000000")
+    
+    # Путь к файлу обложки
+    cover: str | None = Field(default=None)
 
     # Служебные поля
     file_path: str = Field(unique=True, index=True)
@@ -565,7 +570,7 @@ class Book(SQLModel, table=True):
     model_config = ConfigDict(
         validate_assignment=True,
         arbitrary_types_allowed=True
-    )   
+    )  # type: ignore
     
     # --- ВАЛИДАТОРЫ ---
 
@@ -807,6 +812,20 @@ class Book(SQLModel, table=True):
             sessions.append(session)
             
         return sessions
+    
+    @property
+    def cover_url(self) -> str:
+        """Возвращает путь к обложке для тега img."""
+        if not self.cover:
+            # Заглушка, если обложка не найдена
+            return "https://via.placeholder.com/400x600?text=No+Cover"
+        
+        # Если в базе лежит URL
+        if self.cover.startswith("http"):
+            return self.cover
+            
+        # Если это локальный файл из Vault
+        return f"/vault/{self.cover}"
 ```
 
 ---
@@ -836,13 +855,16 @@ class BookRepository(BaseRepository[Book]):
 ```python
 """Роутер для управления разделом книг."""
 
-from typing import Annotated
+import re
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
-from sqlmodel import Session, func, or_, select
+from sqlalchemy import ColumnElement
+from sqlmodel import Session, and_, func, or_, select
 
+from src.common.utils import translate
 from src.core.database import get_session
 from src.parser.sync import sync_books
 
@@ -862,7 +884,11 @@ async def list_books(
     order: str = "desc",
     page: int = 1,
     size: int = 20,
-    q: str | None = None
+    q: str | None = None,
+    status: str | None = None,
+    genre: str | None = None,
+    country: str | None = None,
+    book_format: str | None = None
 ) -> HTMLResponse:
     """
         Список книг с пагинацией и сортировкой.
@@ -875,26 +901,75 @@ async def list_books(
             page: Первоначальная страница.
             size: Кол-во документов на странице.
             q: Данные в поисковой строке.
+            status: Статус прочитанности книги.
+            genre: Основные жанры книги.
+            country: Страна автора.
+            book_format: Формат книги.
         
         Returns:
             HTMLResponse: Обновленный шаблон страницы.
     """
     
-    # 1. Формируем базовый запрос
-    statement = select(Book)
-    count_statement = select(func.count()).select_from(Book)
-
-    # 2. Если есть поисковый запрос, фильтруем по названию или автору
+    # --- 1. Базовый запрос для данных ---
+    
+    # Собираем фильтры для основного списка
+    conditions: list[ColumnElement[bool]] = []
     if q:
-        filter_condition = or_(
-            Book.title.icontains(q), 
-            Book.author.icontains(q),
-            Book.series.icontains(q)
-        )
-        statement = statement.where(filter_condition)
-        count_statement = count_statement.where(filter_condition)
+        conditions.append(or_(Book.title.icontains(q), Book.author.icontains(q), Book.series.icontains(q)))
+    if status:
+        conditions.append(Book.status == status)
+    if country:
+        conditions.append(Book.country_author == country)
+    if book_format:
+        conditions.append(Book.format == book_format)
+    if genre:
+        conditions.append(Book.genres.icontains(genre))
 
-    # 3. Считаем общее количество с учетом фильтра
+    # --- 2. Умная фильтрация для выпадающих списков ---
+    def get_available_values(column: str | int, current_conditions: list[Any]) -> list[Any]:
+        """
+            Получение данных из колонки по текущей фильтрации.
+
+            Args:
+                column: Колонка таблицы (напр. Book.status).
+                current_conditions: Список активных фильтров SQLAlchemy.
+
+            Returns:
+                list[Any]: Список уникальных значений.
+        """
+        stmt = select(column).distinct()
+        if current_conditions:
+            stmt = stmt.where(and_(*current_conditions))
+        
+        # session.exec возвращает Sequence, приводим к list для соответствия аннотации
+        return list(session.exec(stmt).all())
+
+    # Получаем доступные значения, исключая из условий сам этот фильтр (чтобы можно было переключить)
+    filtered_subquery = select(Book)
+    if conditions:
+        filtered_subquery = filtered_subquery.where(and_(*conditions))
+    
+    # Выполняем запросы для получения актуальных списков
+    actual_books_stmt = filtered_subquery
+    avail_statuses = get_available_values(Book.status, conditions)
+    avail_formats = get_available_values(Book.format, conditions)
+    avail_countries = get_available_values(Book.country_author, conditions)
+    
+    # Жанры (чуть сложнее из-за строки)
+    avail_genres_raw = get_available_values(Book.genres, conditions)
+    unique_genres = set()
+    for entry in avail_genres_raw:
+        if not entry:
+            continue
+        parts = re.split(r',\s*(?![^()]*\))', entry)
+        for p in parts:
+            clean_g = re.sub(r'\s*\([^)]*\)', '', p).strip()
+            if clean_g:
+                unique_genres.add(clean_g)
+    
+    count_statement = select(func.count()).select_from(actual_books_stmt.subquery())
+    
+    # --- 3. Рассчеты пагинации ---
     total_count = session.exec(count_statement).one()
     total_pages = (total_count + size - 1) // size
 
@@ -902,22 +977,22 @@ async def list_books(
         page = 1
     if page > total_pages and total_pages > 0:
         page = total_pages
+    offset = (page - 1) * size
         
-    # 4. Рассчет диапазона ближайщих страниц
+    # --- 4. Рассчет диапазона ближайщих страниц ---
     start_range = max(1, page - 2)
     end_range = min(total_pages, page + 2)
     page_numbers = list(range(start_range, end_range + 1))
 
-    # 5. Получаем атрибут для сортировки
+    # --- 5. Получаем атрибут для сортировки ---
     column = getattr(Book, sort, Book.total_rating)
     expression = column.desc() if order == "desc" else column.asc()
     
-    # 6. Запрос с лимитом и смещением (LIMIT / OFFSET)
-    offset = (page - 1) * size
-    statement = statement.order_by(expression).offset(offset).limit(size)
+    # --- 6. Запрос с лимитом и смещением (LIMIT / OFFSET) ---
+    statement = actual_books_stmt.order_by(expression).offset(offset).limit(size)
     books = session.exec(statement).all()
     
-    # 7. Номера книг, показанных на текущей странице
+    # --- 7. Номера книг, показанных на текущей странице ---
     showing_from = offset + 1 if total_count > 0 else 0
     showing_to = min(offset + size, total_count)
     
@@ -948,13 +1023,28 @@ async def list_books(
             "current_order": order,
             "current_page": page,
             "current_search": q or "",
+            
             "total_pages": total_pages,
+            "total_count": total_count,
             "page_numbers": page_numbers,
+            
             "showing_from": showing_from,
             "showing_to": showing_to,
-            "total_count": total_count,
+            
             "sort_label": labels.get(sort, "Сортировка"),
-            "labels": labels
+            "labels": labels,
+            
+            # Динамические списки для фильтрации
+            "all_statuses": [{"id": s, "label": translate(s)} for s in avail_statuses if s],
+            "all_genres": [{"id": g, "label": translate(g)} for g in sorted(list(unique_genres))],
+            "all_countries": sorted([c for c in avail_countries if c and c != "Unknown"]),
+            "all_formats": [{"id": f, "label": translate(f)} for f in avail_formats if f],
+            
+            # Текущие выбранные значения
+            "current_status": status or "",
+            "current_genre": genre or "",
+            "current_country": country or "",
+            "current_format": book_format or ""
         }
     )
 
@@ -989,7 +1079,7 @@ async def book_detail(request: Request, book_id: int, session: SessionDep) -> HT
     if not book:
         raise HTTPException(status_code=404, detail="Книга не найдена")
 
-    # Получаем динамический контент из файла
+    # Просто получаем словарь строк из сервиса
     extra_content = BookService.get_book_content(book.file_path)
 
     return templates.TemplateResponse(
@@ -1011,6 +1101,7 @@ async def book_detail(request: Request, book_id: int, session: SessionDep) -> HT
 import re
 
 from src.core.config import settings
+from src.core.logger import logger
 
 
 class BookService:
@@ -1031,21 +1122,30 @@ class BookService:
 
         content = full_path.read_text(encoding="utf-8")
 
-        # Универсальная функция для поиска контента между заголовками
-        def extract_section(header_name: str) -> str:
-            # Ищем заголовок, затем забираем всё до следующего ## или --- или конца файла
-            # Флаг re.DOTALL позволяет точке . захватывать переносы строк
-            pattern = rf"{re.escape(header_name)}(.*?)(?=\n##|\n---|\Z)"
-            match = re.search(pattern, content, re.DOTALL)
+        def extract_section(keyword: str) -> str:
+            """Находит секцию по ключевому слову в заголовке ##, игнорируя подзаголовки ###."""
+            # ГЛАВНОЕ ИЗМЕНЕНИЕ В ПОСЛЕДНЕЙ ГРУППЕ (Lookahead):
+            # (?=\n##(?![#]) | \n--- | \Z)
+            # Это означает: 
+            # 1. Остановись, если видишь \n##, но ПРИ УСЛОВИИ, что дальше НЕ идет еще одна #
+            # 2. Или если видишь разделитель \n---
+            # 3. Или если это конец файла \Z
+            
+            pattern = rf"(?m)^##\s+[^#\n]*?{re.escape(keyword)}[^\n]*\n(.*?)(?=\n##(?![#])|\n---|\Z)"
+            
+            match = re.search(pattern, content, flags=re.DOTALL)
+            
             if match:
-                return match.group(1).strip()
+                text = match.group(1).strip()
+                logger.debug(f"Секция '{keyword}' успешно захвачена. Символов: {len(text)}")
+                return text
+            
+            logger.warning(f"Секция '{keyword}' не найдена в {relative_path}")
             return ""
 
         return {
-            "main_characters": extract_section("## 👤 Главные герои"),
-            "side_characters": extract_section("## 👤 Второстепенные герои"),
-            "impression": extract_section("## ❤️ Моё впечатление"),
-            "quotes": extract_section("## 📝 Цитаты"),
+            "impression": extract_section("Моё впечатление"),
+            "quotes": extract_section("Цитаты"),
         }
 ```
 
@@ -1059,10 +1159,13 @@ from pathlib import Path
 
 import frontmatter
 
+from src.core.config import settings
 from src.core.exceptions import ValidationError
 from src.core.logger import logger
 
 from .models import Book
+
+IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp"]
 
 
 class BookTransformer:
@@ -1092,6 +1195,20 @@ class BookTransformer:
             raise ValidationError(f"Ошибка структуры YAML: {e}") from e
         
         meta = post.metadata
+        
+        # Поиск обложки в файлах Obsidian
+        book_filename = file_path.stem  # Название заметки без .md
+        covers_dir = vault_path / settings.COVERS_BOOKS_PATH
+        detected_cover = None
+        
+        if covers_dir.exists():
+            for ext in IMAGE_EXTENSIONS:
+                # Ищем файл типа: files/covers/books/Название_книги.jpg
+                potential_file = covers_dir / f"{book_filename}{ext}"
+                if potential_file.exists():
+                    # Сохраняем относительный путь для БД
+                    detected_cover = str(potential_file.relative_to(vault_path))
+                    break
 
         # Извлекаем все данные из метадаты, валидация автоматическая
         return Book(
@@ -1112,6 +1229,7 @@ class BookTransformer:
             finished=str(meta.get("finished", "")) if meta.get("finished") else None,
             bg_color=str(meta.get("bg_color", "#ffffff")),
             text_color=str(meta.get("text_color", "#000000")),
+            cover=detected_cover,
             
             rating_characters=meta.get("rating_characters"),
             rating_plot=meta.get("rating_plot"),
@@ -1467,19 +1585,8 @@ body {
 .books-list { display: flex; flex-direction: column; gap: 10px; }
 .list-header, .book-row {
     display: grid;
-    /* 
-       Точная настройка 9 колонок (сумма должна быть стабильной):
-       60px   - Рейтинг
-       1fr    - Название (гибкое)
-       480px  - Аналитика (ужали на 20px для GR)
-       0.7fr  - Жанры (чуть меньше приоритет)
-       50px   - GR
-       55px   - Год
-       55px   - Стр.
-       100px  - Статус
-       50px   - Опс (иконка)
-    */
-    grid-template-columns: 60px minmax(0, 1fr) 480px minmax(0, 0.7fr) 50px 55px 55px 100px 50px;
+    /* 10 колонок: Рейт(60), Обложка(45), Название(1fr), Аналитика(480), Жанры(0.7fr), GR(50), Год(55), Стр(55), Статус(100), Иконка(50) */
+    grid-template-columns: 60px 45px minmax(0, 1fr) 480px minmax(0, 0.7fr) 50px 55px 55px 100px 50px;
     align-items: center; 
     gap: 15px;
 }
@@ -1588,6 +1695,111 @@ body {
     pointer-events: none;
     filter: grayscale(1);
 }
+
+
+.filter-select {
+    appearance: none; /* Убираем стандартную стрелочку */
+    background-color: #f8fafc;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 10px 35px 10px 15px;
+    font-family: inherit;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-dark);
+    cursor: pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    background-size: 16px;
+    transition: all 0.2s;
+}
+
+.filter-select:hover {
+    border-color: var(--primary);
+    background-color: #ffffff;
+}
+
+.filter-select:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+/* Компактная кнопка сброса */
+.btn-reset {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    text-decoration: none;
+    transition: 0.2s;
+}
+
+.btn-reset:hover {
+    background: #fee2e2;
+    color: #ef4444;
+    border-color: #fca5a5;
+}
+
+/* Стиль контейнера обложки в списке */
+.row-cover-mini {
+    width: 40px;
+    height: 60px;
+    border-radius: 6px;
+    overflow: hidden;
+    background: rgba(0,0,0,0.05);
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    flex-shrink: 0;
+}
+
+.row-cover-mini img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 0.2s;
+}
+
+/* Эффект при наведении на строку */
+.book-row:hover .row-cover-mini img {
+    transform: scale(1.1); /* Картинка чуть увеличивается */
+}
+
+
+/* Стили для текста из Obsidian */
+.prose-content ul {
+    list-style-type: none; /* Убираем стандартные точки, если хотим кастомные */
+    padding-left: 0;
+}
+
+.prose-content li {
+    margin-bottom: 12px;
+    position: relative;
+    padding-left: 20px;
+    line-height: 1.6;
+}
+
+/* Красивый буллит вместо обычного тире */
+.prose-content li::before {
+    content: "•";
+    color: var(--primary);
+    font-weight: bold;
+    position: absolute;
+    left: 0;
+}
+
+/* Стили для второстепенных героев (чуть бледнее) */
+.prose-content.side-chars li {
+    font-size: 0.9rem;
+    color: #636e72;
+}
+.prose-content.side-chars li::before {
+    color: #cbd5e1;
+}
 ```
 
 ---
@@ -1694,215 +1906,276 @@ body {
 {% extends "layout.html" %}
 
 {% block content %}
-<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
-    <h1 style="font-size: 3rem; font-weight: 800; margin: 0; letter-spacing: -2px;">Библиотека</h1>
+<div id="library-container">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+        <h1 style="font-size: 3rem; font-weight: 800; margin: 0; letter-spacing: -2px;">Библиотека</h1>
 
-    <!-- ФОРМА ПОИСКА -->
-    <form method="get" action="/books/" style="position: relative; flex: 1; max-width: 400px;">
-        <input type="text" name="q" value="{{ current_search }}"
-               hx-get="/books/" 
-                hx-trigger="keyup changed delay:500ms" 
-                hx-target=".books-list" 
-                hx-select=".books-list"
-               placeholder="Поиск по названию, автору или серии..." 
-               style="
-                    width: 100%;
-                    padding: 10px 15px 10px 40px;
-                    border-radius: 12px;
-                    border: 1px solid var(--border);
-                    font-family: inherit;
-                    font-size: 0.9rem;
-                    outline: none;
-                    transition: var(--transition);
-               "
-               onfocus="this.style.borderColor='var(--primary)';"
-               onblur="this.style.borderColor='var(--border)';"
-        >
-        <!-- Иконка лупы -->
-        <span style="position: absolute; left: 15px; top: 50%; transform: translateY(-50%); opacity: 0.4;">🔍</span>
+        <!-- ФОРМА ПОИСКА -->
+        <form method="get" action="/books/" style="position: relative; flex: 1; max-width: 400px;">
+            <input type="text" name="q" value="{{ current_search }}"
+                hx-get="/books/" 
+                    hx-trigger="keyup changed delay:500ms" 
+                    hx-target=".books-list" 
+                    hx-select=".books-list"
+                placeholder="Поиск по названию, автору или серии..." 
+                style="
+                        width: 100%;
+                        padding: 10px 15px 10px 40px;
+                        border-radius: 12px;
+                        border: 1px solid var(--border);
+                        font-family: inherit;
+                        font-size: 0.9rem;
+                        outline: none;
+                        transition: var(--transition);
+                "
+                onfocus="this.style.borderColor='var(--primary)';"
+                onblur="this.style.borderColor='var(--border)';"
+            >
+            <!-- Иконка лупы -->
+            <span style="position: absolute; left: 15px; top: 50%; transform: translateY(-50%); opacity: 0.4;">🔍</span>
+            
+            <!-- Сохраняем сортировку при поиске -->
+            <input type="hidden" name="sort" value="{{ current_sort }}">
+            <input type="hidden" name="order" value="{{ current_order }}">
+        </form>
         
-        <!-- Сохраняем сортировку при поиске -->
+        <div style="display: flex; gap: 10px; align-items: center;">
+            <div class="dropdown">
+                <button class="sort-trigger">
+                    <span>📊 Сортировка:</span>
+                    <strong>{{ sort_label }}</strong>
+                    <span style="font-size: 0.6rem; margin-left: 5px;">▼</span>
+                </button>
+                <div class="dropdown-content">
+                    {% for key, label in labels.items() %}
+                    <a href="?sort={{ key }}&order={{ current_order }}&page=1&status={{ current_status }}&genre={{ current_genre }}&country={{ current_country }}&book_format={{ current_format }}&q={{ current_search }}" 
+                    class="{{ 'active' if current_sort == key }}">
+                        {{ label }}
+                    </a>
+                    {% endfor %}
+                </div>
+            </div>
+
+            {% set next_order = 'asc' if current_order == 'desc' else 'desc' %}
+            <a href="?sort={{ current_sort }}&order={{ next_order }}&page=1&status={{ current_status }}&genre={{ current_genre }}&country={{ current_country }}&book_format={{ current_format }}&q={{ current_search }}" 
+            class="order-toggle" title="Изменить направление">
+                {{ '↓' if current_order == 'desc' else '↑' }}
+            </a>
+
+            <!-- Кнопнка обычной синхронизации -->
+            <button class="btn-primary" style="padding: 10px 16px; font-size: 0.9rem;" 
+                    hx-post="/books/sync" hx-target="#sync-report">
+                <span>🔄</span> Синхронизировать
+            </button>
+
+            <!-- Кнопка принудительного полного обновления -->
+            <button class="order-toggle" 
+                    style="width: 45px; font-size: 0.9rem;" 
+                    hx-post="/books/sync?force=true" 
+                    hx-target="#sync-report"
+                    hx-confirm="Перечитать ВСЕ файлы заметок заново?"
+                    title="Полное обновление">
+                ⚡
+            </button>
+        </div>
+    </div>
+
+    <!-- ПАНЕЛЬ ФИЛЬТРОВ -->
+    <form method="get" action="/books/" 
+          hx-get="/books/" 
+          hx-target="#library-container" 
+          hx-select="#library-container"
+          hx-trigger="change from:select"
+          hx-push-url="true"
+          style="display: flex; align-items: center; gap: 12px; background: white; padding: 12px 20px; border-radius: 20px; margin-bottom: 2rem; border: 1px solid var(--border); box-shadow: var(--shadow);">
+        
+        <div style="font-size: 1.2rem; margin-right: 5px;">🔍</div>
+
+        <!-- Статус -->
+        <select name="status" class="filter-select">
+            <option value="">Все статусы</option>
+            {% for s in all_statuses %}
+            <option value="{{ s.id }}" {{ 'selected' if current_status == s.id }}>{{ s.label }}</option>
+            {% endfor %}
+        </select>
+
+        <!-- Жанр -->
+        <select name="genre" class="filter-select">
+            <option value="">Все жанры</option>
+            {% for g in all_genres %}
+            <option value="{{ g.id }}" {{ 'selected' if current_genre == g.id }}>{{ g.label }}</option>
+            {% endfor %}
+        </select>
+
+        <!-- Страна -->
+        <select name="country" class="filter-select">
+            <option value="">Все страны</option>
+            {% for c in all_countries %}
+            <option value="{{ c }}" {{ 'selected' if current_country == c }}>{{ c }}</option>
+            {% endfor %}
+        </select>
+
+        <!-- Формат -->
+        <select name="book_format" class="filter-select">
+            <option value="">Все форматы</option>
+            {% for f in all_formats %}
+            <option value="{{ f.id }}" {{ 'selected' if current_format == f.id }}>{{ f.label }}</option>
+            {% endfor %}
+        </select>
+
+        <!-- Кнопка сброса (уменьшенная) -->
+        <a href="/books/" class="btn-reset" title="Сбросить все фильтры">
+            <span style="font-size: 1.2rem; font-weight: bold;">&times;</span>
+        </a>
+
+        <!-- Скрытые поля -->
+        <input type="hidden" name="q" value="{{ current_search }}">
         <input type="hidden" name="sort" value="{{ current_sort }}">
         <input type="hidden" name="order" value="{{ current_order }}">
     </form>
-    
-    <div style="display: flex; gap: 10px; align-items: center;">
-        <div class="dropdown">
-            <button class="sort-trigger">
-                <span>📊 Сортировка:</span>
-                <strong>{{ sort_label }}</strong>
-                <span style="font-size: 0.6rem; margin-left: 5px;">▼</span>
-            </button>
-            <div class="dropdown-content">
-                {% for key, label in labels.items() %}
-                <a href="?sort={{ key }}&order={{ current_order }}&page=1" class="{{ 'active' if current_sort == key }}">
-                    {{ label }}
-                </a>
+
+
+    <div id="sync-report"></div>
+
+    <div class="books-list">
+        <div class="list-header">
+            <span style="text-align: center;">Рейт.</span>
+            <span></span> <!-- Обложка (пусто) -->
+            <span>Название</span>
+            <span style="text-align: center;">Аналитика</span>
+            <span>Жанры</span>
+            <span style="text-align: right;">GR</span>
+            <span style="text-align: right;">Год</span>
+            <span style="text-align: right;">Стр.</span>
+            <span style="text-align: center;">Статус</span>
+            <span></span> <!-- Иконка перехода к заметке в Obsidian (пусто) -->
+        </div>
+
+        {% for book in books %}
+        <a href="/books/{{ book.id }}" class="book-row" style="background-color: {{ book.bg_color }}; color: {{ book.text_color }};">
+            
+            <!-- 1. Рейтинг -->
+            <div class="row-anchor">{{ book.total_rating|int }}</div>
+
+            <!-- 2. НОВАЯ КОЛОНКА: ОБЛОЖКА -->
+            <div class="row-cover-mini">
+                <img src="{{ book.cover_url }}" loading="lazy" alt="">
+            </div>
+
+            <!-- 3. Название и автор -->
+            <div class="row-title-block">
+                <span class="row-title">{{ book.title }}</span>
+                <div style="display: flex; align-items: center; gap: 8px; margin-top: 2px;">
+                    <span class="row-author">{{ book.author }}</span>
+                    {% if book.country_author and book.country_author != "Unknown" %}
+                        <span style="font-size: 0.65rem; font-weight: 800; text-transform: uppercase; padding: 1px 6px; background: rgba(0,0,0,0.1); border-radius: 4px; opacity: 0.8;">
+                            {{ book.country_author }}
+                        </span>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="rating-matrix">
+                {% set ratings_data = [
+                    ('Герои', book.rating_characters), ('Сюжет', book.rating_plot), 
+                    ('Объем', book.rating_size), ('Слог', book.rating_prose),
+                    ('Финал', book.rating_ending), ('Глуб', book.rating_depth),
+                    ('Атм', book.rating_atmosphere), ('Переч', book.rating_rereadability),
+                    ('Ожид', book.rating_expected_real), ('Рек', book.rating_recommend)
+                ] %}
+                {% for label, val in ratings_data %}
+                <div class="matrix-cell">
+                    <span class="matrix-label">{{ label }}</span>
+                    <span class="matrix-value">{{ val|round(1) }}</span>
+                </div>
                 {% endfor %}
             </div>
-        </div>
 
-        {% set next_order = 'asc' if current_order == 'desc' else 'desc' %}
-        <!-- Кнопка направления теперь имеет класс order-toggle для рамки -->
-        <a href="?sort={{ current_sort }}&order={{ next_order }}" class="order-toggle" title="Изменить направление">
-            {{ '↓' if current_order == 'desc' else '↑' }}
+            <div class="row-genres">
+                {% for genre in book.primary_genres_list_ru %}
+                <div class="list-genre-tag">
+                    {{ genre }}
+                </div>
+                {% endfor %}
+            </div>
+
+            <div style="text-align: right; font-weight: 800; opacity: 0.9;">
+                {{ book.good_reads if book.good_reads else "—" }}
+            </div>
+
+            <div style="text-align: right; font-size: 0.95rem; font-weight: 700;">
+                {{ book.year }}
+            </div>
+            <div class="row-meta" style="text-align: right;"><strong> {{ book.total }} </strong></div>
+            <div style="display: flex; justify-content: center;"><span class="status-pill dynamic-pill"> {{ book.status_ru }} </span></div>
+
+            <div style="display: flex; justify-content: flex-end;">
+                <object>
+                    <a href="obsidian://open?vault=Knowledge_Base&file={{ book.file_path | urlencode }}" 
+                    class="row-anchor obsidian-anchor" title="Открыть в Obsidian">
+                    <!-- Вместо эмодзи используем стилизованный символ -->
+                    <span class="obsidian-icon">↗</span>
+                    </a>
+                </object>
+            </div>
         </a>
-
-        <!-- Кнопнка обычной синхронизации -->
-        <button class="btn-primary" style="padding: 10px 16px; font-size: 0.9rem;" 
-                hx-post="/books/sync" hx-target="#sync-report">
-            <span>🔄</span> Синхронизировать
-        </button>
-
-        <!-- Кнопка принудительного полного обновления -->
-        <button class="order-toggle" 
-                style="width: 45px; font-size: 0.9rem;" 
-                hx-post="/books/sync?force=true" 
-                hx-target="#sync-report"
-                hx-confirm="Перечитать ВСЕ файлы заметок заново?"
-                title="Полное обновление">
-            ⚡
-        </button>
-    </div>
-</div>
-
-<div id="sync-report"></div>
-
-<div class="books-list">
-    <div class="list-header">
-        <span>Рейт.</span>
-        <span>Название</span>
-        <span style="text-align: center;">Аналитика</span>
-        <span>Жанры</span>
-        <span style="text-align: right;">GR</span>
-        <span style="text-align: right;">Год</span>
-        <span style="text-align: right;">Стр.</span>
-        <span style="text-align: center;">Статус</span>
-        <span></span>
-    </div>
-
-    {% for book in books %}
-    <a href="/books/{{ book.id }}" class="book-row" style="background-color: {{ book.bg_color }}; color: {{ book.text_color }};">
-        
-        <div class="row-anchor">{{ book.total_rating|int }}</div>
-
-        <div class="row-title-block">
-            <!-- Название книги -->
-            <span class="row-title">{{ book.title }}</span>
-            
-            <!-- Блок автора и страны -->
-            <div style="display: flex; align-items: center; gap: 8px; margin-top: 2px;">
-                <span class="row-author">{{ book.author }}</span>
-                
-                {% if book.country_author and book.country_author != "Unknown" %}
-                <span style="
-                    font-size: 0.65rem; 
-                    font-weight: 800; 
-                    text-transform: uppercase; 
-                    padding: 1px 6px; 
-                    background: rgba(0,0,0,0.1); 
-                    border-radius: 4px; 
-                    opacity: 0.8;
-                    letter-spacing: 0.5px;
-                ">
-                    {{ book.country_author }}
-                </span>
-                {% endif %}
-            </div>
-        </div>
-
-        <div class="rating-matrix">
-            {% set ratings_data = [
-                ('Герои', book.rating_characters), ('Сюжет', book.rating_plot), 
-                ('Объем', book.rating_size), ('Слог', book.rating_prose),
-                ('Финал', book.rating_ending), ('Глуб', book.rating_depth),
-                ('Атм', book.rating_atmosphere), ('Повт', book.rating_rereadability),
-                ('Ожид', book.rating_expected_real), ('Рек', book.rating_recommend)
-            ] %}
-            {% for label, val in ratings_data %}
-            <div class="matrix-cell">
-                <span class="matrix-label">{{ label }}</span>
-                <span class="matrix-value">{{ val|round(1) }}</span>
-            </div>
-            {% endfor %}
-        </div>
-
-        <div class="row-genres">
-            {% for genre in book.primary_genres_list_ru %}
-            <div class="list-genre-tag">
-                {{ genre }}
-            </div>
-            {% endfor %}
-        </div>
-
-        <div style="text-align: right; font-weight: 800; opacity: 0.9;">
-            {{ book.good_reads if book.good_reads else "—" }}
-        </div>
-
-        <div style="text-align: right; font-size: 0.95rem; font-weight: 700;">
-            {{ book.year }}
-        </div>
-        <div class="row-meta" style="text-align: right;"><strong> {{ book.total }} </strong></div>
-        <div style="display: flex; justify-content: center;"><span class="status-pill dynamic-pill"> {{ book.status_ru }} </span></div>
-
-        <div style="display: flex; justify-content: flex-end;">
-            <object>
-                <a href="obsidian://open?vault=Knowledge_Base&file={{ book.file_path | urlencode }}" 
-                   class="row-anchor obsidian-anchor" title="Открыть в Obsidian">
-                   <!-- Вместо эмодзи используем стилизованный символ -->
-                   <span class="obsidian-icon">↗</span>
-                </a>
-            </object>
-        </div>
-    </a>
-    {% endfor %}
-
-    <!-- Блок Пагинации -->
-    {% if total_pages > 1 %}
-    <div style="margin-top: 4rem; display: flex; justify-content: center; align-items: center; gap: 0.5rem;">
-        
-        <!-- Первая страница -->
-        {% if current_page > 3 %}
-            <a href="?page=1&sort={{ current_sort }}&order={{ current_order }}" 
-            class="order-toggle" style="width: auto; padding: 0 12px; font-weight: 800;">« 1</a>
-            <span style="color: #cbd5e1; margin: 0 5px;">...</span>
-        {% endif %}
-
-        <!-- Назад -->
-        {% if current_page > 1 %}
-            <a href="?page={{ current_page - 1 }}&sort={{ current_sort }}&order={{ current_order }}" 
-            class="order-toggle" style="width: auto; padding: 0 15px;">‹</a>
-        {% endif %}
-
-        <!-- Цифры -->
-        {% for p in page_numbers %}
-            <a href="?page={{ p }}&sort={{ current_sort }}&order={{ current_order }}" 
-            class="order-toggle page-button {{ 'active' if p|int == current_page|int else '' }}">
-                {{ p }}
-            </a>
         {% endfor %}
 
-        <!-- Вперед -->
-        {% if current_page < total_pages %}
-            <a href="?page={{ current_page + 1 }}&sort={{ current_sort }}&order={{ current_order }}" 
-            class="order-toggle" style="width: auto; padding: 0 15px;">›</a>
-        {% endif %}
+        <!-- Блок Пагинации -->
+        {% if total_pages > 1 %}
+        <div style="margin-top: 4rem; display: flex; justify-content: center; align-items: center; gap: 0.5rem;">
+            
+            {# Собираем строку текущих фильтров, чтобы не дублировать код #}
+            {% set filter_params = "&sort=" + current_sort + "&order=" + current_order + "&q=" + current_search + "&status=" + current_status + "&genre=" + current_genre + "&country=" + current_country + "&book_format=" + current_format %}
 
-        <!-- Последняя страница -->
-        {% if current_page < total_pages - 2 %}
-            <span style="color: #cbd5e1; margin: 0 5px;">...</span>
-            <a href="?page={{ total_pages }}&sort={{ current_sort }}&order={{ current_order }}" 
-            class="order-toggle" style="width: auto; padding: 0 12px; font-weight: 800;">{{ total_pages }} »</a>
+            <!-- Первая страница -->
+            {% if current_page > 3 %}
+                <a href="?page=1{{ filter_params }}" 
+                hx-get="?page=1{{ filter_params }}" hx-target="#library-container" hx-select="#library-container" hx-push-url="true"
+                class="order-toggle" style="width: auto; padding: 0 12px; font-weight: 800;">« 1</a>
+                <span style="color: #cbd5e1; margin: 0 5px;">...</span>
+            {% endif %}
+
+            <!-- Назад -->
+            {% if current_page > 1 %}
+                <a href="?page={{ current_page - 1 }}{{ filter_params }}" 
+                hx-get="?page={{ current_page - 1 }}{{ filter_params }}" hx-target="#library-container" hx-select="#library-container" hx-push-url="true"
+                class="order-toggle" style="width: auto; padding: 0 15px;">‹</a>
+            {% endif %}
+
+            <!-- Цифры -->
+            {% for p in page_numbers %}
+                <a href="?page={{ p }}{{ filter_params }}" 
+                hx-get="?page={{ p }}{{ filter_params }}" hx-target="#library-container" hx-select="#library-container" hx-push-url="true"
+                class="order-toggle page-button {{ 'active' if p|int == current_page|int else '' }}">
+                    {{ p }}
+                </a>
+            {% endfor %}
+
+            <!-- Вперед -->
+            {% if current_page < total_pages %}
+                <a href="?page={{ current_page + 1 }}{{ filter_params }}" 
+                hx-get="?page={{ current_page + 1 }}{{ filter_params }}" hx-target="#library-container" hx-select="#library-container" hx-push-url="true"
+                class="order-toggle" style="width: auto; padding: 0 15px;">›</a>
+            {% endif %}
+
+            <!-- Последняя страница -->
+            {% if current_page < total_pages - 2 %}
+                <span style="color: #cbd5e1; margin: 0 5px;">...</span>
+                <a href="?page={{ total_pages }}{{ filter_params }}" 
+                hx-get="?page={{ total_pages }}{{ filter_params }}" hx-target="#library-container" hx-select="#library-container" hx-push-url="true"
+                class="order-toggle" style="width: auto; padding: 0 12px; font-weight: 800;">{{ total_pages }} »</a>
+            {% endif %}
+
+        </div>
+
+        <!-- Текст статистики -->
+        <div style="text-align: center; margin-top: 1.5rem; font-size: 0.75rem; color: #94a3b8; font-weight: 800; text-transform: uppercase; letter-spacing: 1px;">
+            Показано {{ showing_from }}–{{ showing_to }} из {{ total_count }} книг
+        </div>
         {% endif %}
 
     </div>
-
-    <!-- Текст статистики -->
-    <div style="text-align: center; margin-top: 1.5rem; font-size: 0.75rem; color: #94a3b8; font-weight: 800; text-transform: uppercase; letter-spacing: 1px;">
-        Показано {{ showing_from }}–{{ showing_to }} из {{ total_count }} книг
-    </div>
-
-    {% endif %}
 
 </div>
 {% endblock %}
@@ -1915,107 +2188,109 @@ body {
 {% extends "layout.html" %}
 
 {% block content %}
-<div style="max-width: 900px; margin: 0 auto;">
-    <a href="/books/" style="display: inline-block; margin-bottom: 2rem; color: #636e72; text-decoration: none; font-weight: 500;">
+<div style="max-width: 1200px; margin: 0 auto; padding: 0 20px;">
+    <a href="#" onclick="history.back(); return false;" style="display: inline-block; margin-bottom: 2rem; color: #636e72; text-decoration: none; font-weight: 600; transition: 0.2s;" onmouseover="this.style.color='var(--primary)'" onmouseout="this.style.color='#636e72'">
         ← Вернуться в библиотеку
     </a>
 
     <div class="book-card" style="padding: 0; overflow: hidden; border-radius: 24px; background: white;">
-        <!-- Hero Section -->
-        <div style="background-color: {{ book.bg_color }}; color: {{ book.text_color }}; padding: 4rem 3rem;">
-            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                <div style="flex: 1;">
-                    <!-- СЕРИЯ КНИГ (если есть) -->
-                    {% if book.series %}
-                    <div style="font-size: 0.8rem; font-weight: 800; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 0.5rem; opacity: 0.7;">
-                        Серия: {{ book.series }}
-                    </div>
-                    {% endif %}
-
-                    <!-- Жанры -->
-                    <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 1.5rem;">
-                        {% for genre in book.detailed_genres_list_ru %}
-                            <div style="background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.2); padding: 4px 12px; border-radius: 8px; display: flex; align-items: center; gap: 8px; backdrop-filter: blur(4px);">
-                                <span style="font-weight: 800; text-transform: uppercase; font-size: 0.7rem; letter-spacing: 0.5px;">
-                                    {{ genre.name }}
-                                </span>
-                                {% if genre.sub %}
-                                <span style="opacity: 0.8; font-size: 0.75rem; border-left: 1px solid rgba(255,255,255,0.3); padding-left: 8px; font-style: italic;">
-                                    {{ genre.sub }}
-                                </span>
-                                {% endif %}
-                            </div>
-                        {% endfor %}
-                    </div>
-
-                    <!-- Название и Автор -->
-                    <h1 style="font-size: 3.5rem; margin: 0; letter-spacing: -2px; line-height: 1.1;">{{ book.title }}</h1>
-                    <p style="font-size: 1.5rem; opacity: 0.9; margin-top: 0.5rem;">
-                        {{ book.author }}, 
-                        {{ book.year }}
-                    </p>
-                </div>
-                
-<!-- ПРАВАЯ ЧАСТЬ: РЕЙТИНГИ -->
-<div style="text-align: right; margin-left: 2rem; display: flex; flex-direction: column; align-items: flex-end; gap: 1.2rem;">
-    
-    <!-- Твой личный рейтинг (Компактный акцент) -->
-    <div style="
-        background: rgba(255,255,255,0.12); 
-        padding: 15px 25px; 
-        border-radius: 20px; 
-        border: 1px solid rgba(255,255,255,0.2);
-        backdrop-filter: blur(8px);
-        text-align: center;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.08);
-    ">
-        <div style="font-size: 3.2rem; font-weight: 900; line-height: 1;">{{ book.total_rating|int }}</div>
-        <div style="
-            text-transform: uppercase; 
-            font-size: 0.6rem; 
-            font-weight: 800; 
-            opacity: 0.8; 
-            letter-spacing: 1px;
-            margin-top: 4px;
-        ">My Score</div>
-    </div>
-
-    <!-- Рейтинг GoodReads (Минималистичный) -->
-    <div style="text-align: center; padding-right: 10px; opacity: 0.7;">
-        <div style="font-size: 1.5rem; font-weight: 900; line-height: 1;">{{ book.good_reads or '—' }}</div>
-        <div style="
-            text-transform: uppercase; 
-            font-size: 0.5rem; 
-            font-weight: 800; 
-            letter-spacing: 1px; 
-            margin-top: 2px;
-        ">GoodReads</div>
-    </div>
-</div>
+    <!-- Hero Section -->
+    <div style="background-color: {{ book.bg_color }}; color: {{ book.text_color }}; padding: 4rem 3rem;">
+        <!-- Основной контейнер (в одну линию) -->
+        <div style="display: flex; align-items: center; gap: 3rem;">
+            
+            <!-- 1. БЛОК ОБЛОЖКИ (Слева) -->
+            <div style="flex-shrink: 0; width: 220px; height: 320px; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.1);">
+                <img src="{{ book.cover_url }}" alt="{{ book.title }}" style="width: 100%; height: 100%; object-fit: cover;">
             </div>
+
+            <!-- 2. ИНФОРМАЦИЯ (Центр) -->
+            <div style="flex: 1;">
+                <!-- Серия -->
+                {% if book.series %}
+                <div style="font-size: 0.8rem; font-weight: 800; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 0.5rem; opacity: 0.7;">
+                    Серия: {{ book.series }}
+                </div>
+                {% endif %}
+
+                <!-- Жанры -->
+                <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 1.5rem;">
+                    {% for genre in book.detailed_genres_list_ru %}
+                        <div style="background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.2); padding: 4px 12px; border-radius: 8px; display: flex; align-items: center; gap: 8px; backdrop-filter: blur(4px);">
+                            <span style="font-weight: 800; text-transform: uppercase; font-size: 0.7rem; letter-spacing: 0.5px;">
+                                {{ genre.name }}
+                            </span>
+                            {% if genre.sub %}
+                            <span style="opacity: 0.8; font-size: 0.75rem; border-left: 1px solid rgba(255,255,255,0.3); padding-left: 8px; font-style: italic;">
+                                {{ genre.sub }}
+                            </span>
+                            {% endif %}
+                        </div>
+                    {% endfor %}
+                </div>
+
+                <!-- Название и Автор -->
+                <h1 style="font-size: 3.5rem; margin: 0; letter-spacing: -2px; line-height: 1.1;">{{ book.title }}</h1>
+                <p style="font-size: 1.5rem; opacity: 0.9; margin-top: 0.5rem;">
+                    {{ book.author }}, {{ book.year }}
+                </p>
+            </div>
+
+            <!-- 3. РЕЙТИНГИ (Справа) -->
+            <div style="text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 1.5rem; min-width: 150px;">
+                
+                <!-- Личный рейтинг -->
+                <div style="
+                    background: rgba(255,255,255,0.12); 
+                    padding: 20px 30px; 
+                    border-radius: 20px; 
+                    border: 1px solid rgba(255,255,255,0.2);
+                    backdrop-filter: blur(8px);
+                    text-align: center;
+                ">
+                    <div style="font-size: 3.5rem; font-weight: 900; line-height: 1;">{{ book.total_rating|int }}</div>
+                    <div style="text-transform: uppercase; font-size: 0.65rem; font-weight: 800; opacity: 0.8; letter-spacing: 1px; margin-top: 5px;">My Score</div>
+                </div>
+
+                <!-- GoodReads -->
+                <div style="text-align: center; padding-right: 15px; opacity: 0.7;">
+                    <div style="font-size: 1.6rem; font-weight: 900; line-height: 1;">{{ book.good_reads or '—' }}</div>
+                    <div style="text-transform: uppercase; font-size: 0.55rem; font-weight: 800; letter-spacing: 1px; margin-top: 2px;">GoodReads</div>
+                </div>
+            </div>
+
         </div>
+    </div> <!-- Конец Hero Section -->
 
         <div style="padding: 3rem;">
-            <!-- Сетка характеристик -->
-            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 2rem; margin-bottom: 3rem; padding-bottom: 2rem; border-bottom: 1px solid #eee;">
+            <!-- Сетка характеристик (Мета / Издание / Объем) -->
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 3rem; margin-bottom: 4rem; padding-bottom: 3rem; border-bottom: 1px solid #eee;">
+                
+                <!-- 1 колонка: Статусы -->
                 <div>
-                    <h4 style="margin: 0; color: #a4b0be; text-transform: uppercase; font-size: 0.75rem; font-weight: 800; letter-spacing: 1px;">Метаданные</h4>
-                    <ul style="list-style: none; padding: 0; margin: 1rem 0;">
-                        <li style="margin-bottom: 5px;"><strong>Статус:</strong> {{ book.status_ru }}</li>
-                        <li style="margin-bottom: 5px;"><strong>Формат:</strong> {{ book.format_ru }}</li>
-                        <li style="margin-bottom: 5px;"><strong>Язык:</strong> {{ book.language }}</li>
-                        <li style="margin-bottom: 5px;"><strong>Страна:</strong> {{ book.country_author }}</li>
-                        {% if book.series %}
-                        <li style="margin-bottom: 5px;"><strong>Серия:</strong> {{ book.series }}</li>
-                        {% endif %}
-                        {% if book.isbn %}
-                        <li style="margin-bottom: 5px;"><strong>ISBN:</strong> {{ book.isbn }}</li>
-                        {% endif %}
+                    <h4 style="margin: 0; color: #a4b0be; text-transform: uppercase; font-size: 0.7rem; font-weight: 800; letter-spacing: 1px;">Информация</h4>
+                    <ul style="list-style: none; padding: 0; margin: 1rem 0; line-height: 1.8;">
+                        <li><strong>Статус:</strong> {{ book.status_ru }}</li>
+                        <li><strong>Формат:</strong> {{ book.format_ru }}</li>
+                        <li><strong>Язык:</strong> {{ book.language }}</li>
                     </ul>
                 </div>
+
+                <!-- 2 колонка: Издание -->
                 <div>
-                    <h4 style="margin: 0; color: #a4b0be; text-transform: uppercase; font-size: 0.75rem; font-weight: 800; letter-spacing: 1px;">Объем</h4>
-                    <p style="font-size: 1.25rem; margin: 1rem 0 0.5rem 0;"><strong>{{ book.total }}</strong> страниц</p>
+                    <h4 style="margin: 0; color: #a4b0be; text-transform: uppercase; font-size: 0.7rem; font-weight: 800; letter-spacing: 1px;">Издание</h4>
+                    <ul style="list-style: none; padding: 0; margin: 1rem 0; line-height: 1.8;">
+                        <li><strong>Страна:</strong> {{ book.country_author }}</li>
+                        {% if book.series %}<li><strong>Серия:</strong> {{ book.series }}</li>{% endif %}
+                        {% if book.isbn %}<li><strong>ISBN:</strong> {{ book.isbn }}</li>{% endif %}
+                    </ul>
+                </div>
+
+                <!-- 3 колонка: Крупный показатель страниц -->
+                <div style="text-align: right;">
+                    <h4 style="margin: 0; color: #a4b0be; text-transform: uppercase; font-size: 0.7rem; font-weight: 800; letter-spacing: 1px;">Объем</h4>
+                    <div style="font-size: 3.5rem; font-weight: 900; line-height: 1; margin-top: 1rem;">{{ book.total }}</div>
+                    <div style="text-transform: uppercase; font-size: 0.7rem; font-weight: 800; color: #94a3b8;">страниц</div>
                 </div>
             </div>
 
@@ -2108,7 +2383,7 @@ body {
                 </div>
             </div>
 
-            <!-- Контент из Obsidian -->
+            <!-- Секция Моих впечатлений и Цитат из книг -->
             <div class="prose">
                 {% if content.impression %}
                 <div style="margin-bottom: 3rem;">

@@ -32,7 +32,6 @@ TRANSLATIONS: dict[str, str] = {
     "travel": "Путешествия",
     "science": "Наука",
     "philosophy": "Философия",
-    "action": "Боевик",
     "business": "Бизнес",
     "poetry": "Поэзия",
     "classic": "Классика",
@@ -40,7 +39,9 @@ TRANSLATIONS: dict[str, str] = {
     "animation": "Анимация",
     "sitcom": "Ситком",
 
-    # Поджанры (универсально для всех категорий)
+    # --- Поджанры (универсально для всех категорий) ---
+    
+    # Fantasy
     "high": "высокое",
     "epic": "эпическое",
     "dark": "тёмное",
@@ -49,6 +50,8 @@ TRANSLATIONS: dict[str, str] = {
     "heroic": "героическое",
     "urban": "городское",
     "mythic": "мифологическое",
+    
+    # Sci-fi
     "hard": "сложная",
     "space-opera": "космическая опера",
     "cyberpunk": "киберпанк",
@@ -57,12 +60,19 @@ TRANSLATIONS: dict[str, str] = {
     "time-travel": "путешествие во времени",
     "alien-invasion": "инопланетное вторжение",
     "military": "военная",
+    
+    # Thriller
     "psychological": "психологическая",
+    "action": "Экшен",
     "conspiracy": "заговор",
     "legal": "юридическая",
+    
+    # Drama
     "social": "социальная",
     "family": "семейная",
     "war": "военная",
+    
+    # Horror
     "supernatural": "сверхъестественное",
     "body": "боди-хоррор",
     "cosmic": "лавкрафтовский ужас",

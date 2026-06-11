@@ -31,9 +31,8 @@ class Book(SQLModel, table=True):
     language: str
     good_reads: int | None = Field(default=None)
     
-    # Даты начала и конца чтения
-    started: str | None = None
-    finished: str | None = None
+    # Формат в БД: "Дата-Дата | Стр | Коммент || Дата-Дата | Стр | Коммент"
+    read_log: str | None = Field(default=None)
     
     # Рейтинги (10 параметров)
     rating_characters: float
@@ -258,55 +257,90 @@ class Book(SQLModel, table=True):
         
     @property
     def reading_sessions(self) -> list[dict[str, Any]]:
-        """
-            Парсит периоды чтения в формате dd.mm.yyyy, mm.yyyy или yyyy. Разделитель сессий — символ '|'.
-            
-            Returns:
-                list[dict[str, Any]] - Список сессий чтения конкретной книги.
-        """
-        
-        if not self.started:
+        """Парсит унифицированный лог чтений."""
+        if not self.read_log:
             return []
 
-        # 1. Разбиваем строки на списки
-        starts = [s.strip() for s in str(self.started).split("|")]
-        finishes = [f.strip() for f in str(self.finished or "").split("|")]
-        
-        # 2. Выравниваем списки (чтобы для каждого старта был финиш, пусть и пустой)
-        while len(finishes) < len(starts):
-            finishes.append("")
-
         sessions = []
-        logger.debug(f"Начало сессий - {starts}\n;Концы сессий - {finishes}")
-        
-        for i, (s_raw, f_raw) in enumerate(zip(starts, finishes, strict=True), 1):
-            session = {
-                "number": i,
-                "start": s_raw or "?",
-                "finish": f_raw or "в процессе",
-                "days": None,
-                "pages_per_day": None
-            }
-            logger.debug(f"Начало - {s_raw}, Конец - {f_raw}")
+        # Записи разделены через || (это делает трансформер)
+        raw_entries = self.read_log.split(" || ")
 
-            # 3. Пытаемся считать дни только если ОБЕ даты полные (dd.mm.yyyy = 10 знаков)
-            if len(s_raw) == 10 and len(f_raw) == 10:
-                try:
-                    # Указываем формат дня через точку
-                    d1 = datetime.strptime(s_raw, "%d.%m.%Y")
-                    d2 = datetime.strptime(f_raw, "%d.%m.%Y")
-                    
-                    delta = (d2 - d1).days + 1
-                    if delta > 0:
-                        session["days"] = delta
-                        session["pages_per_day"] = round(self.total / delta, 1)
-                except ValueError as e:
-                    logger.error(f"Формат даты при парсинге сессий чтений не подошел - {e}")
-                    pass
-            
-            sessions.append(session)
-            
+        for i, entry in enumerate(raw_entries, 1):
+            try:
+                # Разбиваем строку: "Даты | Стр | Коммент"
+                parts = [p.strip() for p in entry.split("|")]
+                
+                # 1. Обработка Дат
+                date_part = parts[0]
+                dates = date_part.split("-")
+                start_str = dates[0].strip()
+                # Если после дефиса пусто или его нет - ставим точки
+                finish_str = dates[1].strip() if len(dates) > 1 and dates[1].strip() else "..."
+                
+                # 2. Обработка Страниц
+                pages = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 0
+                
+                # 3. Обработка Комментария (Ситуация когда его нет или пусто)
+                comment = parts[2] if len(parts) > 2 and parts[2] else f"Сессия {i}"
+
+                session = {
+                    "number": i,
+                    "start": start_str,
+                    "finish": "в процессе" if finish_str in ["...", ""] else finish_str,
+                    "pages": pages,
+                    "comment": comment,
+                    "days": None,
+                    "pages_per_day": None
+                }
+
+                # Расчет темпа (только для полных дат DD.MM.YYYY)
+                f_val = "" if session["finish"] == "в процессе" else session["finish"]
+                if len(start_str) == 10 and len(f_val) == 10:
+                    try:
+                        d1 = datetime.strptime(start_str, "%d.%m.%Y")
+                        d2 = datetime.strptime(f_val, "%d.%m.%Y")
+                        delta = (d2 - d1).days + 1
+                        if delta > 0:
+                            session["days"] = delta
+                            if pages > 0:
+                                session["pages_per_day"] = round(pages / delta, 1)
+                    except ValueError:
+                        pass
+                
+                sessions.append(session)
+            except Exception:
+                continue
         return sessions
+    
+    @property
+    def read_stats_summary(self) -> dict[str, Any]:
+        """
+            Считает агрегированную статистику по всем сессиям.
+            
+            В рассчете среднего кол-во страниц учитываются только сессии с полными датами.
+        """
+        sessions = self.reading_sessions
+        if not sessions:
+            return {"total_pages": 0, "total_days": None, "avg_pace": None, "percent": 0}
+        
+        total_pages_all = sum(s["pages"] for s in sessions)
+        
+        # Считаем дни только там, где они есть
+        pages_for_pace = sum(s["pages"] for s in sessions if s["days"])
+        total_days = sum(s["days"] for s in sessions if s["days"])
+        
+        # Если дней 0, ставим None для темпа и дней
+        avg_pace = round(pages_for_pace / total_days, 1) if total_days and total_days > 0 else None
+        display_days = total_days if total_days and total_days > 0 else None
+        
+        percent = round((total_pages_all / self.total) * 100) if self.total else 0
+        
+        return {
+            "total_pages": total_pages_all,
+            "total_days": display_days,
+            "avg_pace": avg_pace,
+            "percent": min(percent, 100)
+        }
     
     @property
     def cover_url(self) -> str:
