@@ -36,7 +36,7 @@ class BaseRepository(Generic[T]):
         
         # Мы предполагаем, что у всех моделей будет поле file_path
         statement = select(self.model_type).where(
-            self.model_type.file_path == relative_path  # type: ignore
+            self.model_type.file_path == relative_path # type: ignore
         )
         return self.session.exec(statement).first()
 
@@ -87,5 +87,5 @@ class BaseRepository(Generic[T]):
             Returns:
                 list[str] - Список всех путей файлов
         """
-        statement = select(self.model_type.file_path)
+        statement = select(self.model_type.file_path) # type: ignore
         return self.session.exec(statement).all()

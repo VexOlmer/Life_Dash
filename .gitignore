@@ -40,3 +40,4 @@ Thumbs.db
 # Local configuration
 config.local.*
 *.local.*
+project_snapshot.txt

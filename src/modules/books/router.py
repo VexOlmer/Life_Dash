@@ -1,11 +1,12 @@
 """Роутер для управления разделом книг."""
 
 import re
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
+from sqlalchemy import ColumnElement
 from sqlmodel import Session, and_, func, or_, select
 
 from src.common.utils import translate
@@ -27,7 +28,7 @@ async def list_books(
     sort: str = "total_rating",
     order: str = "desc",
     page: int = 1,
-    size: int = 2,
+    size: int = 20,
     q: str | None = None,
     status: str | None = None,
     genre: str | None = None,
@@ -57,7 +58,7 @@ async def list_books(
     # --- 1. Базовый запрос для данных ---
     
     # Собираем фильтры для основного списка
-    conditions = []
+    conditions: list[ColumnElement[bool]] = []
     if q:
         conditions.append(or_(Book.title.icontains(q), Book.author.icontains(q), Book.series.icontains(q)))
     if status:
@@ -70,18 +71,23 @@ async def list_books(
         conditions.append(Book.genres.icontains(genre))
 
     # --- 2. Умная фильтрация для выпадающих списков ---
-    def get_available_values(column, current_conditions):  # noqa: ANN001
+    def get_available_values(column: str | int, current_conditions: list[Any]) -> list[Any]:
         """
             Получение данных из колонки по текущей фильтрации.
-            
+
             Args:
-                column: Наименование столбца
-                current_conditions: Текущий набор фильтров
+                column: Колонка таблицы (напр. Book.status).
+                current_conditions: Список активных фильтров SQLAlchemy.
+
+            Returns:
+                list[Any]: Список уникальных значений.
         """
         stmt = select(column).distinct()
         if current_conditions:
             stmt = stmt.where(and_(*current_conditions))
-        return session.exec(stmt).all()
+        
+        # session.exec возвращает Sequence, приводим к list для соответствия аннотации
+        return list(session.exec(stmt).all())
 
     # Получаем доступные значения, исключая из условий сам этот фильтр (чтобы можно было переключить)
     filtered_subquery = select(Book)
@@ -218,7 +224,7 @@ async def book_detail(request: Request, book_id: int, session: SessionDep) -> HT
     if not book:
         raise HTTPException(status_code=404, detail="Книга не найдена")
 
-    # Получаем динамический контент из файла
+    # Просто получаем словарь строк из сервиса
     extra_content = BookService.get_book_content(book.file_path)
 
     return templates.TemplateResponse(

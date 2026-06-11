@@ -134,7 +134,8 @@
 
     <div class="books-list">
         <div class="list-header">
-            <span>Рейт.</span>
+            <span style="text-align: center;">Рейт.</span>
+            <span></span> <!-- Обложка (пусто) -->
             <span>Название</span>
             <span style="text-align: center;">Аналитика</span>
             <span>Жанры</span>
@@ -142,35 +143,29 @@
             <span style="text-align: right;">Год</span>
             <span style="text-align: right;">Стр.</span>
             <span style="text-align: center;">Статус</span>
-            <span></span>
+            <span></span> <!-- Иконка перехода к заметке в Obsidian (пусто) -->
         </div>
 
         {% for book in books %}
         <a href="/books/{{ book.id }}" class="book-row" style="background-color: {{ book.bg_color }}; color: {{ book.text_color }};">
             
+            <!-- 1. Рейтинг -->
             <div class="row-anchor">{{ book.total_rating|int }}</div>
 
+            <!-- 2. НОВАЯ КОЛОНКА: ОБЛОЖКА -->
+            <div class="row-cover-mini">
+                <img src="{{ book.cover_url }}" loading="lazy" alt="">
+            </div>
+
+            <!-- 3. Название и автор -->
             <div class="row-title-block">
-                <!-- Название книги -->
                 <span class="row-title">{{ book.title }}</span>
-                
-                <!-- Блок автора и страны -->
                 <div style="display: flex; align-items: center; gap: 8px; margin-top: 2px;">
                     <span class="row-author">{{ book.author }}</span>
-                    
                     {% if book.country_author and book.country_author != "Unknown" %}
-                    <span style="
-                        font-size: 0.65rem; 
-                        font-weight: 800; 
-                        text-transform: uppercase; 
-                        padding: 1px 6px; 
-                        background: rgba(0,0,0,0.1); 
-                        border-radius: 4px; 
-                        opacity: 0.8;
-                        letter-spacing: 0.5px;
-                    ">
-                        {{ book.country_author }}
-                    </span>
+                        <span style="font-size: 0.65rem; font-weight: 800; text-transform: uppercase; padding: 1px 6px; background: rgba(0,0,0,0.1); border-radius: 4px; opacity: 0.8;">
+                            {{ book.country_author }}
+                        </span>
                     {% endif %}
                 </div>
             </div>
@@ -180,7 +175,7 @@
                     ('Герои', book.rating_characters), ('Сюжет', book.rating_plot), 
                     ('Объем', book.rating_size), ('Слог', book.rating_prose),
                     ('Финал', book.rating_ending), ('Глуб', book.rating_depth),
-                    ('Атм', book.rating_atmosphere), ('Повт', book.rating_rereadability),
+                    ('Атм', book.rating_atmosphere), ('Переч', book.rating_rereadability),
                     ('Ожид', book.rating_expected_real), ('Рек', book.rating_recommend)
                 ] %}
                 {% for label, val in ratings_data %}

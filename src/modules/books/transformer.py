@@ -4,10 +4,13 @@ from pathlib import Path
 
 import frontmatter
 
+from src.core.config import settings
 from src.core.exceptions import ValidationError
 from src.core.logger import logger
 
 from .models import Book
+
+IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp"]
 
 
 class BookTransformer:
@@ -37,6 +40,20 @@ class BookTransformer:
             raise ValidationError(f"Ошибка структуры YAML: {e}") from e
         
         meta = post.metadata
+        
+        # Поиск обложки в файлах Obsidian
+        book_filename = file_path.stem  # Название заметки без .md
+        covers_dir = vault_path / settings.COVERS_BOOKS_PATH
+        detected_cover = None
+        
+        if covers_dir.exists():
+            for ext in IMAGE_EXTENSIONS:
+                # Ищем файл типа: files/covers/books/Название_книги.jpg
+                potential_file = covers_dir / f"{book_filename}{ext}"
+                if potential_file.exists():
+                    # Сохраняем относительный путь для БД
+                    detected_cover = str(potential_file.relative_to(vault_path))
+                    break
 
         # Извлекаем все данные из метадаты, валидация автоматическая
         return Book(
@@ -57,6 +74,7 @@ class BookTransformer:
             finished=str(meta.get("finished", "")) if meta.get("finished") else None,
             bg_color=str(meta.get("bg_color", "#ffffff")),
             text_color=str(meta.get("text_color", "#000000")),
+            cover=detected_cover,
             
             rating_characters=meta.get("rating_characters"),
             rating_plot=meta.get("rating_plot"),

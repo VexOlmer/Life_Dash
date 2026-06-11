@@ -80,19 +80,8 @@ body {
 .books-list { display: flex; flex-direction: column; gap: 10px; }
 .list-header, .book-row {
     display: grid;
-    /* 
-       Точная настройка 9 колонок (сумма должна быть стабильной):
-       60px   - Рейтинг
-       1fr    - Название (гибкое)
-       480px  - Аналитика (ужали на 20px для GR)
-       0.7fr  - Жанры (чуть меньше приоритет)
-       50px   - GR
-       55px   - Год
-       55px   - Стр.
-       100px  - Статус
-       50px   - Опс (иконка)
-    */
-    grid-template-columns: 60px minmax(0, 1fr) 480px minmax(0, 0.7fr) 50px 55px 55px 100px 50px;
+    /* 10 колонок: Рейт(60), Обложка(45), Название(1fr), Аналитика(480), Жанры(0.7fr), GR(50), Год(55), Стр(55), Статус(100), Иконка(50) */
+    grid-template-columns: 60px 45px minmax(0, 1fr) 480px minmax(0, 0.7fr) 50px 55px 55px 100px 50px;
     align-items: center; 
     gap: 15px;
 }
@@ -250,4 +239,59 @@ body {
     background: #fee2e2;
     color: #ef4444;
     border-color: #fca5a5;
+}
+
+/* Стиль контейнера обложки в списке */
+.row-cover-mini {
+    width: 40px;
+    height: 60px;
+    border-radius: 6px;
+    overflow: hidden;
+    background: rgba(0,0,0,0.05);
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    flex-shrink: 0;
+}
+
+.row-cover-mini img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 0.2s;
+}
+
+/* Эффект при наведении на строку */
+.book-row:hover .row-cover-mini img {
+    transform: scale(1.1); /* Картинка чуть увеличивается */
+}
+
+
+/* Стили для текста из Obsidian */
+.prose-content ul {
+    list-style-type: none; /* Убираем стандартные точки, если хотим кастомные */
+    padding-left: 0;
+}
+
+.prose-content li {
+    margin-bottom: 12px;
+    position: relative;
+    padding-left: 20px;
+    line-height: 1.6;
+}
+
+/* Красивый буллит вместо обычного тире */
+.prose-content li::before {
+    content: "•";
+    color: var(--primary);
+    font-weight: bold;
+    position: absolute;
+    left: 0;
+}
+
+/* Стили для второстепенных героев (чуть бледнее) */
+.prose-content.side-chars li {
+    font-size: 0.9rem;
+    color: #636e72;
+}
+.prose-content.side-chars li::before {
+    color: #cbd5e1;
 }

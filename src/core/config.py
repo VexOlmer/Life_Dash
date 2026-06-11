@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     SERIES_PATH: str = "notes/movies_series/series"
     DAILY_PATH: str = "periodic/daily"
     WEEKLY_PATH: str = "periodic/weekly"
+    COVERS_BOOKS_PATH: str = "files/covers/books"
 
     DATABASE_URL: str = "sqlite:///./data/db.sqlite"
 

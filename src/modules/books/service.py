@@ -3,6 +3,7 @@
 import re
 
 from src.core.config import settings
+from src.core.logger import logger
 
 
 class BookService:
@@ -23,19 +24,28 @@ class BookService:
 
         content = full_path.read_text(encoding="utf-8")
 
-        # Универсальная функция для поиска контента между заголовками
-        def extract_section(header_name: str) -> str:
-            # Ищем заголовок, затем забираем всё до следующего ## или --- или конца файла
-            # Флаг re.DOTALL позволяет точке . захватывать переносы строк
-            pattern = rf"{re.escape(header_name)}(.*?)(?=\n##|\n---|\Z)"
-            match = re.search(pattern, content, re.DOTALL)
+        def extract_section(keyword: str) -> str:
+            """Находит секцию по ключевому слову в заголовке ##, игнорируя подзаголовки ###."""
+            # ГЛАВНОЕ ИЗМЕНЕНИЕ В ПОСЛЕДНЕЙ ГРУППЕ (Lookahead):
+            # (?=\n##(?![#]) | \n--- | \Z)
+            # Это означает: 
+            # 1. Остановись, если видишь \n##, но ПРИ УСЛОВИИ, что дальше НЕ идет еще одна #
+            # 2. Или если видишь разделитель \n---
+            # 3. Или если это конец файла \Z
+            
+            pattern = rf"(?m)^##\s+[^#\n]*?{re.escape(keyword)}[^\n]*\n(.*?)(?=\n##(?![#])|\n---|\Z)"
+            
+            match = re.search(pattern, content, flags=re.DOTALL)
+            
             if match:
-                return match.group(1).strip()
+                text = match.group(1).strip()
+                logger.debug(f"Секция '{keyword}' успешно захвачена. Символов: {len(text)}")
+                return text
+            
+            logger.warning(f"Секция '{keyword}' не найдена в {relative_path}")
             return ""
 
         return {
-            "main_characters": extract_section("## 👤 Главные герои"),
-            "side_characters": extract_section("## 👤 Второстепенные герои"),
-            "impression": extract_section("## ❤️ Моё впечатление"),
-            "quotes": extract_section("## 📝 Цитаты"),
+            "impression": extract_section("Моё впечатление"),
+            "quotes": extract_section("Цитаты"),
         }

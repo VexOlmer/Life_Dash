@@ -53,6 +53,9 @@ class Book(SQLModel, table=True):
     # Цвета фона и текста
     bg_color: str = Field(default="#ffffff")
     text_color: str = Field(default="#000000")
+    
+    # Путь к файлу обложки
+    cover: str | None = Field(default=None)
 
     # Служебные поля
     file_path: str = Field(unique=True, index=True)
@@ -62,7 +65,7 @@ class Book(SQLModel, table=True):
     model_config = ConfigDict(
         validate_assignment=True,
         arbitrary_types_allowed=True
-    )   
+    )  # type: ignore
     
     # --- ВАЛИДАТОРЫ ---
 
@@ -304,3 +307,17 @@ class Book(SQLModel, table=True):
             sessions.append(session)
             
         return sessions
+    
+    @property
+    def cover_url(self) -> str:
+        """Возвращает путь к обложке для тега img."""
+        if not self.cover:
+            # Заглушка, если обложка не найдена
+            return "https://via.placeholder.com/400x600?text=No+Cover"
+        
+        # Если в базе лежит URL
+        if self.cover.startswith("http"):
+            return self.cover
+            
+        # Если это локальный файл из Vault
+        return f"/vault/{self.cover}"

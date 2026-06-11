@@ -1,107 +1,109 @@
 {% extends "layout.html" %}
 
 {% block content %}
-<div style="max-width: 900px; margin: 0 auto;">
-    <a href="/books/" style="display: inline-block; margin-bottom: 2rem; color: #636e72; text-decoration: none; font-weight: 500;">
+<div style="max-width: 1200px; margin: 0 auto; padding: 0 20px;">
+    <a href="#" onclick="history.back(); return false;" style="display: inline-block; margin-bottom: 2rem; color: #636e72; text-decoration: none; font-weight: 600; transition: 0.2s;" onmouseover="this.style.color='var(--primary)'" onmouseout="this.style.color='#636e72'">
         ← Вернуться в библиотеку
     </a>
 
     <div class="book-card" style="padding: 0; overflow: hidden; border-radius: 24px; background: white;">
-        <!-- Hero Section -->
-        <div style="background-color: {{ book.bg_color }}; color: {{ book.text_color }}; padding: 4rem 3rem;">
-            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                <div style="flex: 1;">
-                    <!-- СЕРИЯ КНИГ (если есть) -->
-                    {% if book.series %}
-                    <div style="font-size: 0.8rem; font-weight: 800; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 0.5rem; opacity: 0.7;">
-                        Серия: {{ book.series }}
-                    </div>
-                    {% endif %}
-
-                    <!-- Жанры -->
-                    <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 1.5rem;">
-                        {% for genre in book.detailed_genres_list_ru %}
-                            <div style="background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.2); padding: 4px 12px; border-radius: 8px; display: flex; align-items: center; gap: 8px; backdrop-filter: blur(4px);">
-                                <span style="font-weight: 800; text-transform: uppercase; font-size: 0.7rem; letter-spacing: 0.5px;">
-                                    {{ genre.name }}
-                                </span>
-                                {% if genre.sub %}
-                                <span style="opacity: 0.8; font-size: 0.75rem; border-left: 1px solid rgba(255,255,255,0.3); padding-left: 8px; font-style: italic;">
-                                    {{ genre.sub }}
-                                </span>
-                                {% endif %}
-                            </div>
-                        {% endfor %}
-                    </div>
-
-                    <!-- Название и Автор -->
-                    <h1 style="font-size: 3.5rem; margin: 0; letter-spacing: -2px; line-height: 1.1;">{{ book.title }}</h1>
-                    <p style="font-size: 1.5rem; opacity: 0.9; margin-top: 0.5rem;">
-                        {{ book.author }}, 
-                        {{ book.year }}
-                    </p>
-                </div>
-                
-<!-- ПРАВАЯ ЧАСТЬ: РЕЙТИНГИ -->
-<div style="text-align: right; margin-left: 2rem; display: flex; flex-direction: column; align-items: flex-end; gap: 1.2rem;">
-    
-    <!-- Твой личный рейтинг (Компактный акцент) -->
-    <div style="
-        background: rgba(255,255,255,0.12); 
-        padding: 15px 25px; 
-        border-radius: 20px; 
-        border: 1px solid rgba(255,255,255,0.2);
-        backdrop-filter: blur(8px);
-        text-align: center;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.08);
-    ">
-        <div style="font-size: 3.2rem; font-weight: 900; line-height: 1;">{{ book.total_rating|int }}</div>
-        <div style="
-            text-transform: uppercase; 
-            font-size: 0.6rem; 
-            font-weight: 800; 
-            opacity: 0.8; 
-            letter-spacing: 1px;
-            margin-top: 4px;
-        ">My Score</div>
-    </div>
-
-    <!-- Рейтинг GoodReads (Минималистичный) -->
-    <div style="text-align: center; padding-right: 10px; opacity: 0.7;">
-        <div style="font-size: 1.5rem; font-weight: 900; line-height: 1;">{{ book.good_reads or '—' }}</div>
-        <div style="
-            text-transform: uppercase; 
-            font-size: 0.5rem; 
-            font-weight: 800; 
-            letter-spacing: 1px; 
-            margin-top: 2px;
-        ">GoodReads</div>
-    </div>
-</div>
+    <!-- Hero Section -->
+    <div style="background-color: {{ book.bg_color }}; color: {{ book.text_color }}; padding: 4rem 3rem;">
+        <!-- Основной контейнер (в одну линию) -->
+        <div style="display: flex; align-items: center; gap: 3rem;">
+            
+            <!-- 1. БЛОК ОБЛОЖКИ (Слева) -->
+            <div style="flex-shrink: 0; width: 220px; height: 320px; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.1);">
+                <img src="{{ book.cover_url }}" alt="{{ book.title }}" style="width: 100%; height: 100%; object-fit: cover;">
             </div>
+
+            <!-- 2. ИНФОРМАЦИЯ (Центр) -->
+            <div style="flex: 1;">
+                <!-- Серия -->
+                {% if book.series %}
+                <div style="font-size: 0.8rem; font-weight: 800; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 0.5rem; opacity: 0.7;">
+                    Серия: {{ book.series }}
+                </div>
+                {% endif %}
+
+                <!-- Жанры -->
+                <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 1.5rem;">
+                    {% for genre in book.detailed_genres_list_ru %}
+                        <div style="background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.2); padding: 4px 12px; border-radius: 8px; display: flex; align-items: center; gap: 8px; backdrop-filter: blur(4px);">
+                            <span style="font-weight: 800; text-transform: uppercase; font-size: 0.7rem; letter-spacing: 0.5px;">
+                                {{ genre.name }}
+                            </span>
+                            {% if genre.sub %}
+                            <span style="opacity: 0.8; font-size: 0.75rem; border-left: 1px solid rgba(255,255,255,0.3); padding-left: 8px; font-style: italic;">
+                                {{ genre.sub }}
+                            </span>
+                            {% endif %}
+                        </div>
+                    {% endfor %}
+                </div>
+
+                <!-- Название и Автор -->
+                <h1 style="font-size: 3.5rem; margin: 0; letter-spacing: -2px; line-height: 1.1;">{{ book.title }}</h1>
+                <p style="font-size: 1.5rem; opacity: 0.9; margin-top: 0.5rem;">
+                    {{ book.author }}, {{ book.year }}
+                </p>
+            </div>
+
+            <!-- 3. РЕЙТИНГИ (Справа) -->
+            <div style="text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 1.5rem; min-width: 150px;">
+                
+                <!-- Личный рейтинг -->
+                <div style="
+                    background: rgba(255,255,255,0.12); 
+                    padding: 20px 30px; 
+                    border-radius: 20px; 
+                    border: 1px solid rgba(255,255,255,0.2);
+                    backdrop-filter: blur(8px);
+                    text-align: center;
+                ">
+                    <div style="font-size: 3.5rem; font-weight: 900; line-height: 1;">{{ book.total_rating|int }}</div>
+                    <div style="text-transform: uppercase; font-size: 0.65rem; font-weight: 800; opacity: 0.8; letter-spacing: 1px; margin-top: 5px;">My Score</div>
+                </div>
+
+                <!-- GoodReads -->
+                <div style="text-align: center; padding-right: 15px; opacity: 0.7;">
+                    <div style="font-size: 1.6rem; font-weight: 900; line-height: 1;">{{ book.good_reads or '—' }}</div>
+                    <div style="text-transform: uppercase; font-size: 0.55rem; font-weight: 800; letter-spacing: 1px; margin-top: 2px;">GoodReads</div>
+                </div>
+            </div>
+
         </div>
+    </div> <!-- Конец Hero Section -->
 
         <div style="padding: 3rem;">
-            <!-- Сетка характеристик -->
-            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 2rem; margin-bottom: 3rem; padding-bottom: 2rem; border-bottom: 1px solid #eee;">
+            <!-- Сетка характеристик (Мета / Издание / Объем) -->
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 3rem; margin-bottom: 4rem; padding-bottom: 3rem; border-bottom: 1px solid #eee;">
+                
+                <!-- 1 колонка: Статусы -->
                 <div>
-                    <h4 style="margin: 0; color: #a4b0be; text-transform: uppercase; font-size: 0.75rem; font-weight: 800; letter-spacing: 1px;">Метаданные</h4>
-                    <ul style="list-style: none; padding: 0; margin: 1rem 0;">
-                        <li style="margin-bottom: 5px;"><strong>Статус:</strong> {{ book.status_ru }}</li>
-                        <li style="margin-bottom: 5px;"><strong>Формат:</strong> {{ book.format_ru }}</li>
-                        <li style="margin-bottom: 5px;"><strong>Язык:</strong> {{ book.language }}</li>
-                        <li style="margin-bottom: 5px;"><strong>Страна:</strong> {{ book.country_author }}</li>
-                        {% if book.series %}
-                        <li style="margin-bottom: 5px;"><strong>Серия:</strong> {{ book.series }}</li>
-                        {% endif %}
-                        {% if book.isbn %}
-                        <li style="margin-bottom: 5px;"><strong>ISBN:</strong> {{ book.isbn }}</li>
-                        {% endif %}
+                    <h4 style="margin: 0; color: #a4b0be; text-transform: uppercase; font-size: 0.7rem; font-weight: 800; letter-spacing: 1px;">Информация</h4>
+                    <ul style="list-style: none; padding: 0; margin: 1rem 0; line-height: 1.8;">
+                        <li><strong>Статус:</strong> {{ book.status_ru }}</li>
+                        <li><strong>Формат:</strong> {{ book.format_ru }}</li>
+                        <li><strong>Язык:</strong> {{ book.language }}</li>
                     </ul>
                 </div>
+
+                <!-- 2 колонка: Издание -->
                 <div>
-                    <h4 style="margin: 0; color: #a4b0be; text-transform: uppercase; font-size: 0.75rem; font-weight: 800; letter-spacing: 1px;">Объем</h4>
-                    <p style="font-size: 1.25rem; margin: 1rem 0 0.5rem 0;"><strong>{{ book.total }}</strong> страниц</p>
+                    <h4 style="margin: 0; color: #a4b0be; text-transform: uppercase; font-size: 0.7rem; font-weight: 800; letter-spacing: 1px;">Издание</h4>
+                    <ul style="list-style: none; padding: 0; margin: 1rem 0; line-height: 1.8;">
+                        <li><strong>Страна:</strong> {{ book.country_author }}</li>
+                        {% if book.series %}<li><strong>Серия:</strong> {{ book.series }}</li>{% endif %}
+                        {% if book.isbn %}<li><strong>ISBN:</strong> {{ book.isbn }}</li>{% endif %}
+                    </ul>
+                </div>
+
+                <!-- 3 колонка: Крупный показатель страниц -->
+                <div style="text-align: right;">
+                    <h4 style="margin: 0; color: #a4b0be; text-transform: uppercase; font-size: 0.7rem; font-weight: 800; letter-spacing: 1px;">Объем</h4>
+                    <div style="font-size: 3.5rem; font-weight: 900; line-height: 1; margin-top: 1rem;">{{ book.total }}</div>
+                    <div style="text-transform: uppercase; font-size: 0.7rem; font-weight: 800; color: #94a3b8;">страниц</div>
                 </div>
             </div>
 
@@ -194,7 +196,7 @@
                 </div>
             </div>
 
-            <!-- Контент из Obsidian -->
+            <!-- Секция Моих впечатлений и Цитат из книг -->
             <div class="prose">
                 {% if content.impression %}
                 <div style="margin-bottom: 3rem;">

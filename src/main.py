@@ -45,6 +45,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 app.mount("/static", StaticFiles(directory="src/web/static"), name="static")
+app.mount("/vault", StaticFiles(directory=str(settings.OBSIDIAN_VAULT_PATH)), name="vault")
 
 app.include_router(web_router)    # Главная страница (/)
 app.include_router(books_router)  # Модуль книг (/books)
