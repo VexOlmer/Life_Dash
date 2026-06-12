@@ -80,8 +80,7 @@ body {
 .books-list { display: flex; flex-direction: column; gap: 10px; }
 .list-header, .book-row {
     display: grid;
-    /* 10 колонок: Рейт(60), Обложка(45), Название(1fr), Аналитика(480), Жанры(0.7fr), GR(50), Год(55), Стр(55), Статус(100), Иконка(50) */
-    grid-template-columns: 60px 45px minmax(0, 1fr) 480px minmax(0, 0.7fr) 50px 55px 55px 100px 50px;
+    grid-template-columns: 40px 60px 45px minmax(0, 1fr) 480px minmax(0, 0.7fr) 50px 55px 55px 100px 50px;
     align-items: center; 
     gap: 15px;
 }
@@ -294,4 +293,26 @@ body {
 }
 .prose-content.side-chars li::before {
     color: #cbd5e1;
+}
+
+
+/* 2. Стилизуем номер */
+.row-number {
+    font-size: 1rem;             /* Увеличили размер */
+    font-weight: 900;           /* Максимальная жирность */
+    opacity: 0.4;               /* Делаем его полупрозрачным, чтобы не спорил с заголовком */
+    text-align: center;
+    border-right: 2px solid rgba(0,0,0,0.1); /* Вертикальная черта */
+    height: 100%;               /* Чтобы линия была на всю высоту */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding-right: 10px;
+    font-family: 'Inter', sans-serif;
+    letter-spacing: -1px;
+}
+
+/* 3. Если фон строки темный, сделаем линию светлее (для адаптивности) */
+.book-row:hover .row-number {
+    opacity: 0.8;               /* При наведении номер становится четче */
 }

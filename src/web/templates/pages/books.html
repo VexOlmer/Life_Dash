@@ -110,11 +110,12 @@
             {% endfor %}
         </select>
 
-        <!-- Формат -->
         <select name="book_format" class="filter-select">
             <option value="">Все форматы</option>
             {% for f in all_formats %}
-            <option value="{{ f.id }}" {{ 'selected' if current_format == f.id }}>{{ f.label }}</option>
+            <option value="{{ f.id }}" {{ 'selected' if current_format == f.id }}>
+                {{ f.label }}
+            </option>
             {% endfor %}
         </select>
 
@@ -134,6 +135,7 @@
 
     <div class="books-list">
         <div class="list-header">
+            <span style="text-align: center;">№</span> <!-- Порядковый номер -->
             <span style="text-align: center;">Рейт.</span>
             <span></span> <!-- Обложка (пусто) -->
             <span>Название</span>
@@ -148,6 +150,9 @@
 
         {% for book in books %}
         <a href="/books/{{ book.id }}" class="book-row" style="background-color: {{ book.bg_color }}; color: {{ book.text_color }};">
+
+            <!-- Порядковый номер с учетом страницы -->
+            <span class="row-number">{{ showing_from + loop.index0 }}</span>
             
             <!-- 1. Рейтинг -->
             <div class="row-anchor">{{ book.total_rating|int }}</div>
