@@ -74,8 +74,6 @@ class BookTransformer:
             status=meta.get("status", "finished"),
             genres=str(meta.get("genres")),
             series=meta.get("series"),
-            format=meta.get("format"),
-            language=meta.get("language"),
             good_reads=meta.get("good_reads"),
             
             read_log=read_log_str, 

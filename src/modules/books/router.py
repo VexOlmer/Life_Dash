@@ -1,12 +1,11 @@
 """Роутер для управления разделом книг."""
 
 import re
-from typing import Annotated, Any
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import ColumnElement
 from sqlmodel import Session, and_, func, or_, select
 
 from src.common.utils import translate
@@ -55,66 +54,73 @@ async def list_books(
             HTMLResponse: Обновленный шаблон страницы.
     """
     
-    # --- 1. Базовый запрос для данных ---
-    
-    # Собираем фильтры для основного списка
-    conditions: list[ColumnElement[bool]] = []
+    # --- 1. Собираем все активные фильтры ---
+    conditions = []
     if q:
         conditions.append(or_(Book.title.icontains(q), Book.author.icontains(q), Book.series.icontains(q)))
     if status:
         conditions.append(Book.status == status)
     if country:
         conditions.append(Book.country_author == country)
-    if book_format:
-        conditions.append(Book.format == book_format)
     if genre:
         conditions.append(Book.genres.icontains(genre))
+    if book_format:
+        conditions.append(Book.read_log.icontains(book_format))
 
-    # --- 2. Умная фильтрация для выпадающих списков ---
-    def get_available_values(column: str | int, current_conditions: list[Any]) -> list[Any]:
-        """
-            Получение данных из колонки по текущей фильтрации.
-
-            Args:
-                column: Колонка таблицы (напр. Book.status).
-                current_conditions: Список активных фильтров SQLAlchemy.
-
-            Returns:
-                list[Any]: Список уникальных значений.
-        """
-        stmt = select(column).distinct()
-        if current_conditions:
-            stmt = stmt.where(and_(*current_conditions))
-        
-        # session.exec возвращает Sequence, приводим к list для соответствия аннотации
-        return list(session.exec(stmt).all())
-
-    # Получаем доступные значения, исключая из условий сам этот фильтр (чтобы можно было переключить)
-    filtered_subquery = select(Book)
+    # --- 2. Создаем базовый запрос для ТЕКУЩИХ отфильтрованных книг ---
+    # Мы будем использовать этот запрос как основу для всех выпадающих списков
+    filtered_stmt = select(Book)
     if conditions:
-        filtered_subquery = filtered_subquery.where(and_(*conditions))
+        filtered_stmt = filtered_stmt.where(and_(*conditions))
     
-    # Выполняем запросы для получения актуальных списков
-    actual_books_stmt = filtered_subquery
-    avail_statuses = get_available_values(Book.status, conditions)
-    avail_formats = get_available_values(Book.format, conditions)
-    avail_countries = get_available_values(Book.country_author, conditions)
+    # --- 3. Получаем АКТУАЛЬНЫЕ значения для фильтров ---
+
+    # Статусы
+    avail_statuses = session.exec(
+        select(Book.status).where(and_(*conditions)).distinct() if conditions 
+        else select(Book.status).distinct()
+    ).all()
     
-    # Жанры (чуть сложнее из-за строки)
-    avail_genres_raw = get_available_values(Book.genres, conditions)
+    # Страны
+    avail_countries = session.exec(
+        select(Book.country_author).where(and_(*conditions)).distinct() if conditions 
+        else select(Book.country_author).distinct()
+    ).all()
+
+    # Основные жанры
+    genres_raw = session.exec(
+        select(Book.genres).where(and_(*conditions)).distinct() if conditions 
+        else select(Book.genres).distinct()
+    ).all()
+    
     unique_genres = set()
-    for entry in avail_genres_raw:
+    for entry in genres_raw:
         if not entry:
             continue
-        parts = re.split(r',\s*(?![^()]*\))', entry)
-        for p in parts:
-            clean_g = re.sub(r'\s*\([^)]*\)', '', p).strip()
-            if clean_g:
-                unique_genres.add(clean_g)
+        for p in re.split(r',\s*(?![^()]*\))', entry):
+            clean = re.sub(r'\s*\([^)]*\)', '', p).strip()
+            if clean:
+                unique_genres.add(clean)
+
+    # Форматы (Парсим только из отфильтрованных книг)
+    logs_raw = session.exec(
+        select(Book.read_log).where(Book.read_log is not None).where(and_(*conditions)) if conditions 
+        else select(Book.read_log).where(Book.read_log is not None)
+    ).all()
     
-    count_statement = select(func.count()).select_from(actual_books_stmt.subquery())
+    unique_formats = set()
+    for log in logs_raw:
+        for entry in log.split(" || "):
+            parts = entry.split("|")
+            if len(parts) >= 3:
+                fmt = parts[2].strip()
+                if fmt:
+                    unique_formats.add(fmt)
+    avail_formats = sorted(list(unique_formats))
     
-    # --- 3. Рассчеты пагинации ---
+    # --- 4. Рассчеты пагинации ---
+    count_statement = select(func.count()).select_from(filtered_stmt.subquery())
+    
     total_count = session.exec(count_statement).one()
     total_pages = (total_count + size - 1) // size
 
@@ -124,20 +130,20 @@ async def list_books(
         page = total_pages
     offset = (page - 1) * size
         
-    # --- 4. Рассчет диапазона ближайщих страниц ---
+    # --- 5. Рассчет диапазона ближайщих страниц ---
     start_range = max(1, page - 2)
     end_range = min(total_pages, page + 2)
     page_numbers = list(range(start_range, end_range + 1))
 
-    # --- 5. Получаем атрибут для сортировки ---
+    # --- 6. Получаем атрибут для сортировки ---
     column = getattr(Book, sort, Book.total_rating)
     expression = column.desc() if order == "desc" else column.asc()
     
-    # --- 6. Запрос с лимитом и смещением (LIMIT / OFFSET) ---
-    statement = actual_books_stmt.order_by(expression).offset(offset).limit(size)
+    # --- 7. Запрос с лимитом и смещением (LIMIT / OFFSET) ---
+    statement = filtered_stmt.order_by(expression).offset(offset).limit(size)
     books = session.exec(statement).all()
     
-    # --- 7. Номера книг, показанных на текущей странице ---
+    # --- 8. Номера книг, показанных на текущей странице ---
     showing_from = offset + 1 if total_count > 0 else 0
     showing_to = min(offset + size, total_count)
     

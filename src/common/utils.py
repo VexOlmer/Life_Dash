@@ -88,6 +88,12 @@ TRANSLATIONS: dict[str, str] = {
     "rating_rereadability": "Перечитывание",
     "rating_expected_real": "Ожидание / Реальность",
     "rating_recommend": "Рекомендация",
+    
+    # Языки
+    "russian": "Русский",
+    "english": "Английский",
+    "ru": "Русский",
+    "en": "Английский",
 }
 
 def translate(key: str | None) -> str:

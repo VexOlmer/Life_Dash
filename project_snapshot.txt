@@ -266,7 +266,6 @@ TRANSLATIONS: dict[str, str] = {
     "travel": "Путешествия",
     "science": "Наука",
     "philosophy": "Философия",
-    "action": "Боевик",
     "business": "Бизнес",
     "poetry": "Поэзия",
     "classic": "Классика",
@@ -274,7 +273,9 @@ TRANSLATIONS: dict[str, str] = {
     "animation": "Анимация",
     "sitcom": "Ситком",
 
-    # Поджанры (универсально для всех категорий)
+    # --- Поджанры (универсально для всех категорий) ---
+    
+    # Fantasy
     "high": "высокое",
     "epic": "эпическое",
     "dark": "тёмное",
@@ -283,6 +284,8 @@ TRANSLATIONS: dict[str, str] = {
     "heroic": "героическое",
     "urban": "городское",
     "mythic": "мифологическое",
+    
+    # Sci-fi
     "hard": "сложная",
     "space-opera": "космическая опера",
     "cyberpunk": "киберпанк",
@@ -291,12 +294,19 @@ TRANSLATIONS: dict[str, str] = {
     "time-travel": "путешествие во времени",
     "alien-invasion": "инопланетное вторжение",
     "military": "военная",
+    
+    # Thriller
     "psychological": "психологическая",
+    "action": "Экшен",
     "conspiracy": "заговор",
     "legal": "юридическая",
+    
+    # Drama
     "social": "социальная",
     "family": "семейная",
     "war": "военная",
+    
+    # Horror
     "supernatural": "сверхъестественное",
     "body": "боди-хоррор",
     "cosmic": "лавкрафтовский ужас",
@@ -532,13 +542,10 @@ class Book(SQLModel, table=True):
     status: str = "finished"
     genres: str
     series: str | None = None
-    format: str
-    language: str
     good_reads: int | None = Field(default=None)
     
-    # Даты начала и конца чтения
-    started: str | None = None
-    finished: str | None = None
+    # Формат в БД: "Дата-Дата | Стр | Формат книги | Язык книги | Коммент || Дата-Дата | Стр | Формат книги | Язык книги | Коммент"
+    read_log: str | None = Field(default=None)
     
     # Рейтинги (10 параметров)
     rating_characters: float
@@ -571,8 +578,6 @@ class Book(SQLModel, table=True):
         validate_assignment=True,
         arbitrary_types_allowed=True
     )  # type: ignore
-    
-    # --- ВАЛИДАТОРЫ ---
 
     @field_validator("bg_color", "text_color", mode="before")
     @classmethod
@@ -598,7 +603,11 @@ class Book(SQLModel, table=True):
     @field_validator("genres", mode="before")
     @classmethod
     def validate_genres(cls, v: str) -> str:
-        """Валидация жанров и поджанров."""
+        """
+            Валидация жанров и поджанров.
+            
+            Обязательно наличие 1-3 основных жанров, внутри каждого неболее 2-х поджанров.
+        """
         if not v.strip():
             raise ValueError("Список жанров не может быть пустым")
         
@@ -618,7 +627,56 @@ class Book(SQLModel, table=True):
                     raise ValueError(f"В жанре '{block}' не может быть более 2-х поджанров")
         return v
 
-    # --- СВОЙСТВА ДЛЯ ЛОГОВ И ВЕБА ---
+    @staticmethod
+    def _time_to_minutes(time_str: str) -> int:
+        """
+            Конвертирует '12:30' или '45' в минуты (целое число).
+            
+            Args:
+                time_str: Общее время в часах или минутах.
+                
+            Returns:
+                int: Общее время в минутах
+        """
+        
+        time_str = str(time_str).strip()
+        if ":" in time_str:
+            try:
+                parts = time_str.split(":")
+                # Если формат ЧЧ:ММ (например, 12:30)
+                if len(parts) == 2:
+                    return int(parts[0]) * 60 + int(parts[1])
+                # Если формат ЧЧ:ММ:СС (на всякий случай)
+                elif len(parts) == 3:
+                    return int(parts[0]) * 60 + int(parts[1])
+            except (ValueError, IndexError):
+                return 0
+        # Если введено просто число (например, "45"), считаем это минутами
+        return int(time_str) if time_str.isdigit() else 0
+
+    @staticmethod
+    def _minutes_to_pretty(minutes: int) -> str:
+        """
+            Конвертирует минуты в часых с минутами/только минуты.
+
+            Args:
+                minutes: Общее кол-во минут.
+            
+            Returns:
+                str: Минуты или Часы с минутами.
+        """
+        
+        if minutes <= 0:
+            return "0м"
+        if minutes < 60:
+            return f"{minutes}м"
+        
+        h = minutes // 60 # Целое количество часов
+        m = minutes % 60  # Остаток минут
+        
+        if m == 0:
+            return f"{h}ч"
+        return f"{h}ч {m}м"
 
     @property
     def primary_genres_list(self) -> list[str]:
@@ -764,54 +822,140 @@ class Book(SQLModel, table=True):
     @property
     def reading_sessions(self) -> list[dict[str, Any]]:
         """
-            Парсит периоды чтения в формате dd.mm.yyyy, mm.yyyy или yyyy. Разделитель сессий — символ '|'.
+            Парсит сессии чтения из строки read_log и рассчитывает аналитику темпа.
+            
+            Ожидаемый формат одной записи в Obsidian (минимум 4 части):
+            Даты | Объём (стр или ЧЧ:ММ) | Формат (paper/electronic/audio) | Язык | [Комментарий]
             
             Returns:
-                list[dict[str, Any]] - Список сессий чтения конкретной книги.
+                list[dict[str, Any]]: Список словарей с данными каждой сессии:
+                    - number: порядковый номер
+                    - start/finish: даты начала и конца
+                    - volume_val: числовое значение объема (стр или минуты)
+                    - display_volume: отформатированная строка объема
+                    - comment: описание сессии
+                    - format/language: технические характеристики
+                    - type: тип контента (audio/book)
+                    - days: длительность в днях
+                    - pace: рассчитанный темп (стр/дн или время/дн)
         """
         
-        if not self.started:
+        if not self.read_log:
             return []
 
-        # 1. Разбиваем строки на списки
-        starts = [s.strip() for s in str(self.started).split("|")]
-        finishes = [f.strip() for f in str(self.finished or "").split("|")]
-        
-        # 2. Выравниваем списки (чтобы для каждого старта был финиш, пусть и пустой)
-        while len(finishes) < len(starts):
-            finishes.append("")
-
         sessions = []
-        logger.debug(f"Начало сессий - {starts}\n;Концы сессий - {finishes}")
-        
-        for i, (s_raw, f_raw) in enumerate(zip(starts, finishes, strict=True), 1):
-            session = {
-                "number": i,
-                "start": s_raw or "?",
-                "finish": f_raw or "в процессе",
-                "days": None,
-                "pages_per_day": None
-            }
-            logger.debug(f"Начало - {s_raw}, Конец - {f_raw}")
+        # Разделитель сессий, склеенный трансформером
+        raw_entries = self.read_log.split(" || ")
 
-            # 3. Пытаемся считать дни только если ОБЕ даты полные (dd.mm.yyyy = 10 знаков)
-            if len(s_raw) == 10 and len(f_raw) == 10:
-                try:
-                    # Указываем формат дня через точку
-                    d1 = datetime.strptime(s_raw, "%d.%m.%Y")
-                    d2 = datetime.strptime(f_raw, "%d.%m.%Y")
-                    
-                    delta = (d2 - d1).days + 1
-                    if delta > 0:
-                        session["days"] = delta
-                        session["pages_per_day"] = round(self.total / delta, 1)
-                except ValueError as e:
-                    logger.error(f"Формат даты при парсинге сессий чтений не подошел - {e}")
-                    pass
-            
-            sessions.append(session)
-            
+        for i, entry in enumerate(raw_entries, 1):
+            try:
+                # Ожидаем минимум 4 обязательных поля (Даты, Объем, Формат, Язык)
+                parts = [p.strip() for p in entry.split("|")]
+                if len(parts) < 4:
+                    logger.warning(f"Пропуск сессии {i} в {self.title}: недостаточно полей (нужно 4, найдено {len(parts)})")
+                    continue
+
+                # 1. Даты (обязательно)
+                date_part = parts[0]
+                dates = date_part.split("-")
+                start_str = dates[0].strip()
+                finish_str = dates[1].strip() if len(dates) > 1 and dates[1].strip() else "..."
+                
+                # 2. Объем (обязательно)
+                raw_vol = parts[1]
+                
+                # 3. Формат (обязательно)
+                s_format = parts[2]
+                
+                # 4. Язык (обязательно)
+                s_lang = parts[3]
+                
+                # 5. Комментарий (опционально)
+                comment = parts[4] if len(parts) > 4 and parts[4] else f"Сессия {i}"
+
+                # --- Определение типа контента и обработка объема ---
+                if s_format == "audio" or ":" in raw_vol:
+                    vol_val = self._time_to_minutes(raw_vol)
+                    disp_vol = self._minutes_to_pretty(vol_val)
+                    s_type = "audio"
+                else:
+                    vol_val = int(raw_vol) if str(raw_vol).isdigit() else 0
+                    disp_vol = f"{vol_val} стр"
+                    s_type = "book"
+
+                session = {
+                    "number": i,
+                    "start": start_str,
+                    "finish": "в процессе" if finish_str in ["...", ""] else finish_str,
+                    "volume_val": vol_val,
+                    "display_volume": disp_vol,
+                    "comment": comment,
+                    "format": s_format,
+                    "language": s_lang,
+                    "type": s_type,
+                    "days": None,
+                    "pace": None
+                }
+
+                # --- Расчет аналитики (только при наличии полных дат) ---
+                f_val = "" if session["finish"] == "в процессе" else session["finish"]
+                if len(start_str) == 10 and len(f_val) == 10:
+                    try:
+                        d1 = datetime.strptime(start_str, "%d.%m.%Y")
+                        d2 = datetime.strptime(f_val, "%d.%m.%Y")
+                        delta = (d2 - d1).days + 1
+                        
+                        if delta > 0:
+                            session["days"] = delta
+                            pace_val = round(vol_val / delta, 1)
+                            # Форматируем темп в зависимости от типа
+                            if s_type == "audio":
+                                session["pace"] = f"{self._minutes_to_pretty(int(pace_val))}/дн"
+                            else:
+                                session["pace"] = f"{pace_val} стр/дн"
+                    except ValueError as e:
+                        logger.debug(f"Некорректный формат дат в сессии {i} фильма {self.title}: {e}")
+                
+                sessions.append(session)
+
+            except (ValueError, IndexError) as e:
+                logger.error(f"Критическая ошибка парсинга сессии {i} в файле {self.file_path}: {e}")
+                continue
+                
         return sessions
+    
+    @property
+    def read_stats_summary(self) -> dict[str, Any]:
+        """Считает агрегированную статистику только для бумажных/электронных сессий."""
+        sessions = self.reading_sessions
+        if not sessions:
+            return {"total_pages": None, "total_days": None, "avg_pace": None, "percent": 0}
+        
+        # 1. Фильтруем сессии, которые относятся к книгам (paper/electronic)
+        page_sessions = [s for s in sessions if s["type"] == "book"]
+        
+        # 2. Считаем страницы (только если есть хотя бы одна такая сессия)
+        total_pages = sum(s["volume_val"] for s in page_sessions) if page_sessions else None
+        
+        # 3. Дни считаем по ВСЕМ сессиям (и аудио, и бумаге), так как это общее время с книгой
+        total_days = sum(s["days"] for s in sessions if s["days"])
+        
+        # 4. Средний темп считаем только для страниц
+        pages_for_pace = sum(s["volume_val"] for s in page_sessions if s["days"])
+        days_with_pages = sum(s["days"] for s in page_sessions if s["days"])
+        avg_pace = round(pages_for_pace / days_with_pages, 1) if days_with_pages else None
+        
+        # 5. Прогресс (проценты)
+        percent = 0
+        if self.total and total_pages:
+            percent = round((total_pages / self.total) * 100)
+        
+        return {
+            "total_pages": total_pages,
+            "total_days": total_days or None,
+            "avg_pace": avg_pace,
+            "percent": min(percent, 100)
+        }
     
     @property
     def cover_url(self) -> str:
@@ -826,6 +970,23 @@ class Book(SQLModel, table=True):
             
         # Если это локальный файл из Vault
         return f"/vault/{self.cover}"
+    
+    
+    @property
+    def all_formats_list(self) -> list[str]:
+        """Возвращает список уникальных форматов из read_log."""
+        if not self.read_log:
+            return []
+        
+        formats = []
+        raw_entries = self.read_log.split(" || ")
+        for entry in raw_entries:
+            parts = [p.strip() for p in entry.split("|")]
+            if len(parts) >= 3:
+                fmt = parts[2]
+                if fmt and fmt not in formats:
+                    formats.append(fmt)
+        return formats
 ```
 
 ---
@@ -921,7 +1082,7 @@ async def list_books(
     if country:
         conditions.append(Book.country_author == country)
     if book_format:
-        conditions.append(Book.format == book_format)
+        conditions.append(Book.read_log.icontains(book_format))
     if genre:
         conditions.append(Book.genres.icontains(genre))
 
@@ -952,8 +1113,20 @@ async def list_books(
     # Выполняем запросы для получения актуальных списков
     actual_books_stmt = filtered_subquery
     avail_statuses = get_available_values(Book.status, conditions)
-    avail_formats = get_available_values(Book.format, conditions)
     avail_countries = get_available_values(Book.country_author, conditions)
+    
+    # --- 2. Получение списка форматов для фильтра ---
+    all_logs = session.exec(select(Book.read_log).where(Book.read_log is not None)).all()
+    unique_formats = set()
+    for log in all_logs:
+        for entry in log.split(" || "):
+            parts = entry.split("|")
+            if len(parts) >= 3:
+                fmt = parts[2].strip()
+                if fmt:
+                    unique_formats.add(fmt)
+    
+    avail_formats = sorted(list(unique_formats))
     
     # Жанры (чуть сложнее из-за строки)
     avail_genres_raw = get_available_values(Book.genres, conditions)
@@ -1210,6 +1383,13 @@ class BookTransformer:
                     detected_cover = str(potential_file.relative_to(vault_path))
                     break
 
+        log_entries = meta.get("read_log", [])
+        if isinstance(log_entries, list):
+            # Склеиваем записи через специальный разделитель ||
+            read_log_str = " || ".join([str(e) for e in log_entries])
+        else:
+            read_log_str = str(log_entries) if log_entries else None
+
         # Извлекаем все данные из метадаты, валидация автоматическая
         return Book(
             title=meta.get("title", file_path.stem),
@@ -1222,11 +1402,10 @@ class BookTransformer:
             status=meta.get("status", "finished"),
             genres=str(meta.get("genres")),
             series=meta.get("series"),
-            format=meta.get("format"),
-            language=meta.get("language"),
             good_reads=meta.get("good_reads"),
-            started=str(meta.get("started", "")) if meta.get("started") else None,
-            finished=str(meta.get("finished", "")) if meta.get("finished") else None,
+            
+            read_log=read_log_str, 
+
             bg_color=str(meta.get("bg_color", "#ffffff")),
             text_color=str(meta.get("text_color", "#000000")),
             cover=detected_cover,
@@ -1585,8 +1764,7 @@ body {
 .books-list { display: flex; flex-direction: column; gap: 10px; }
 .list-header, .book-row {
     display: grid;
-    /* 10 колонок: Рейт(60), Обложка(45), Название(1fr), Аналитика(480), Жанры(0.7fr), GR(50), Год(55), Стр(55), Статус(100), Иконка(50) */
-    grid-template-columns: 60px 45px minmax(0, 1fr) 480px minmax(0, 0.7fr) 50px 55px 55px 100px 50px;
+    grid-template-columns: 40px 60px 45px minmax(0, 1fr) 480px minmax(0, 0.7fr) 50px 55px 55px 100px 50px;
     align-items: center; 
     gap: 15px;
 }
@@ -1799,6 +1977,28 @@ body {
 }
 .prose-content.side-chars li::before {
     color: #cbd5e1;
+}
+
+
+/* 2. Стилизуем номер */
+.row-number {
+    font-size: 1rem;             /* Увеличили размер */
+    font-weight: 900;           /* Максимальная жирность */
+    opacity: 0.4;               /* Делаем его полупрозрачным, чтобы не спорил с заголовком */
+    text-align: center;
+    border-right: 2px solid rgba(0,0,0,0.1); /* Вертикальная черта */
+    height: 100%;               /* Чтобы линия была на всю высоту */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding-right: 10px;
+    font-family: 'Inter', sans-serif;
+    letter-spacing: -1px;
+}
+
+/* 3. Если фон строки темный, сделаем линию светлее (для адаптивности) */
+.book-row:hover .row-number {
+    opacity: 0.8;               /* При наведении номер становится четче */
 }
 ```
 
@@ -2019,7 +2219,9 @@ body {
         <select name="book_format" class="filter-select">
             <option value="">Все форматы</option>
             {% for f in all_formats %}
-            <option value="{{ f.id }}" {{ 'selected' if current_format == f.id }}>{{ f.label }}</option>
+            <option value="{{ f }}" {{ 'selected' if current_format == f }}>
+                {{ f }}
+            </option>
             {% endfor %}
         </select>
 
@@ -2039,6 +2241,7 @@ body {
 
     <div class="books-list">
         <div class="list-header">
+            <span style="text-align: center;">№</span> <!-- Порядковый номер -->
             <span style="text-align: center;">Рейт.</span>
             <span></span> <!-- Обложка (пусто) -->
             <span>Название</span>
@@ -2053,6 +2256,9 @@ body {
 
         {% for book in books %}
         <a href="/books/{{ book.id }}" class="book-row" style="background-color: {{ book.bg_color }}; color: {{ book.text_color }};">
+
+            <!-- Порядковый номер с учетом страницы -->
+            <span class="row-number">{{ showing_from + loop.index0 }}</span>
             
             <!-- 1. Рейтинг -->
             <div class="row-anchor">{{ book.total_rating|int }}</div>
@@ -2263,16 +2469,16 @@ body {
     </div> <!-- Конец Hero Section -->
 
         <div style="padding: 3rem;">
-            <!-- Сетка характеристик (Мета / Издание / Объем) -->
+            <!-- Сетка характеристик (3 колонки) -->
             <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 3rem; margin-bottom: 4rem; padding-bottom: 3rem; border-bottom: 1px solid #eee;">
                 
-                <!-- 1 колонка: Статусы -->
+                <!-- 1 колонка: Информация -->
                 <div>
                     <h4 style="margin: 0; color: #a4b0be; text-transform: uppercase; font-size: 0.7rem; font-weight: 800; letter-spacing: 1px;">Информация</h4>
                     <ul style="list-style: none; padding: 0; margin: 1rem 0; line-height: 1.8;">
                         <li><strong>Статус:</strong> {{ book.status_ru }}</li>
-                        <li><strong>Формат:</strong> {{ book.format_ru }}</li>
-                        <li><strong>Язык:</strong> {{ book.language }}</li>
+                        <li><strong>Автор:</strong> {{ book.author }}</li>
+                        <li><strong>Страна:</strong> {{ book.country_author }}</li>
                     </ul>
                 </div>
 
@@ -2280,77 +2486,120 @@ body {
                 <div>
                     <h4 style="margin: 0; color: #a4b0be; text-transform: uppercase; font-size: 0.7rem; font-weight: 800; letter-spacing: 1px;">Издание</h4>
                     <ul style="list-style: none; padding: 0; margin: 1rem 0; line-height: 1.8;">
-                        <li><strong>Страна:</strong> {{ book.country_author }}</li>
+                        <li><strong>Год выпуска:</strong> {{ book.year }}</li>
                         {% if book.series %}<li><strong>Серия:</strong> {{ book.series }}</li>{% endif %}
                         {% if book.isbn %}<li><strong>ISBN:</strong> {{ book.isbn }}</li>{% endif %}
                     </ul>
                 </div>
 
-                <!-- 3 колонка: Крупный показатель страниц -->
+                <!-- 3 колонка: Объем -->
                 <div style="text-align: right;">
-                    <h4 style="margin: 0; color: #a4b0be; text-transform: uppercase; font-size: 0.7rem; font-weight: 800; letter-spacing: 1px;">Объем</h4>
+                    <h4 style="margin: 0; color: #a4b0be; text-transform: uppercase; font-size: 0.7rem; font-weight: 800; letter-spacing: 1px;">Эталонный объем</h4>
                     <div style="font-size: 3.5rem; font-weight: 900; line-height: 1; margin-top: 1rem;">{{ book.total }}</div>
                     <div style="text-transform: uppercase; font-size: 0.7rem; font-weight: 800; color: #94a3b8;">страниц</div>
                 </div>
             </div>
 
-            <!-- Секция периодов чтения -->
-            <div style="margin-bottom: 3rem;">
-                <h2 style="font-size: 1.5rem; letter-spacing: -0.5px; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 10px;">
-                    <span>⏳</span> История чтения и темп
-                </h2>
+            <!-- СЕКЦИЯ: ИСТОРИЯ ЧТЕНИЯ -->
+            <div style="margin-top: 4rem; margin-bottom: 6rem;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 2.5rem;">
+                    <h2 style="font-size: 1.8rem; letter-spacing: -1px; margin: 0; display: flex; align-items: center; gap: 12px;">
+                        <span style="background: #f1f5f9; padding: 8px; border-radius: 12px;">⏳</span> История чтения
+                    </h2>
+                    <div style="text-align: right;">
+                        <span style="font-size: 0.8rem; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px;">Общий прогресс</span>
+                        <div style="font-size: 1.5rem; font-weight: 900; color: var(--text-dark);">{{ book.read_stats_summary.percent }}%</div>
+                    </div>
+                </div>
 
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem;">
+                <!-- 1. ИТОГОВАЯ ПАНЕЛЬ (SUMMARY) -->
+                {% if book.reading_sessions %}
+                <div style="display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 2px; background: #e2e8f0; border: 1px solid #e2e8f0; border-radius: 20px; overflow: hidden; margin-bottom: 3rem; box-shadow: var(--shadow);">
+                    <div style="background: white; padding: 1.5rem 2rem;">
+                        <div style="font-size: 0.65rem; font-weight: 800; color: #94a3b8; text-transform: uppercase; margin-bottom: 8px;">Прогресс страниц</div>
+                        <div style="display: flex; align-items: center; gap: 15px;">
+                            <div style="flex: 1; height: 8px; background: #f1f5f9; border-radius: 10px; overflow: hidden;">
+                                <div style="width: {{ book.read_stats_summary.percent }}%; height: 100%; background: var(--primary); transition: 1s ease;"></div>
+                            </div>
+                            <span style="font-weight: 800; font-size: 1.1rem;">
+                                {{ book.read_stats_summary.total_pages or '—' }} 
+                                <small style="opacity: 0.5;">/ {{ book.total }}</small>
+                            </span>
+                        </div>
+                    </div>
+                    <div style="background: white; padding: 1.5rem; text-align: center;">
+                        <div style="font-size: 0.65rem; font-weight: 800; color: #94a3b8; text-transform: uppercase; margin-bottom: 5px;">Дней</div>
+                        <div style="font-size: 1.4rem; font-weight: 900;">{{ book.read_stats_summary.total_days or '—' }}</div>
+                    </div>
+                    <div style="background: white; padding: 1.5rem; text-align: center;">
+                        <div style="font-size: 0.65rem; font-weight: 800; color: #94a3b8; text-transform: uppercase; margin-bottom: 5px;">Ср. темп</div>
+                        <div style="font-size: 1.4rem; font-weight: 900; color: #10b981;">{{ book.read_stats_summary.avg_pace or '—' }}</div>
+                    </div>
+                    <div style="background: white; padding: 1.5rem; text-align: center;">
+                        <div style="font-size: 0.65rem; font-weight: 800; color: #94a3b8; text-transform: uppercase; margin-bottom: 5px;">Сессий</div>
+                        <div style="font-size: 1.4rem; font-weight: 900;">{{ book.reading_sessions|length }}</div>
+                    </div>
+                </div>
+
+                <!-- 2. СПИСОК КАРТОЧЕК СЕССИЙ -->
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 1.5rem;">
                     {% for session in book.reading_sessions %}
-                    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 16px; padding: 1.5rem; position: relative; overflow: hidden;">
+                    <div class="session-card" style="background: white; border: 1px solid #e2e8f0; border-radius: 24px; padding: 1.5rem; position: relative; transition: 0.3s; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02);">
                         
-                        <!-- Номер сессии на фоне -->
-                        <div style="position: absolute; right: 15px; top: 5px; font-size: 5rem; font-weight: 900; color: rgba(0,0,0,0.03); z-index: 0; pointer-events: none;">
-                            {{ session.number }}
+                        <!-- Полоска формата слева -->
+                        <div style="position: absolute; left: 0; top: 20%; bottom: 20%; width: 4px; border-radius: 0 4px 4px 0; background: {% if session.format == 'audio' %}#10b981{% elif session.format == 'electronic' %}#6366f1{% else %}#94a3b8{% endif %};"></div>
+
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.2rem;">
+                            <div style="flex: 1; padding-right: 15px;">
+                                <div style="font-size: 1.15rem; font-weight: 800; letter-spacing: -0.5px; color: var(--text-dark); line-height: 1.2; {% if 'Сессия' in session.comment %}opacity: 0.25; font-weight: 700;{% endif %}">
+                                    {{ session.comment }}
+                                </div>
+                                <div style="font-size: 0.8rem; color: #94a3b8; font-weight: 600; margin-top: 4px; font-family: monospace;">{{ session.start }} — {{ session.finish }}</div>
+                            </div>
+                            
+                            <div style="display: flex; gap: 8px; align-items: center;">
+                                {% if session.finish == "в процессе" %}
+                                    <span style="background: #f5f3ff; color: #6366f1; padding: 6px 12px; border-radius: 10px; font-size: 0.65rem; font-weight: 800; text-transform: uppercase; border: 1px solid #ddd6fe; flex-shrink: 0;">Читаю</span>
+                                {% endif %}
+                                
+                                <!-- Язык сессии -->
+                                <div style="background: #f1f5f9; padding: 4px 8px; border-radius: 8px; border: 1px solid #e2e8f0; font-size: 0.6rem; font-weight: 800; color: #64748b; text-transform: uppercase;">
+                                    {{ session.language[:2] if session.language else '??' }}
+                                </div>
+
+                                <!-- Кружок формата и номера -->
+                                <div style="width: 42px; height: 42px; background: #f1f5f9; border-radius: 14px; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 1px solid #e2e8f0; flex-shrink: 0;">
+                                    <span style="font-size: 0.9rem;">
+                                        {% if session.format == 'audio' %}🎧{% elif session.format == 'electronic' %}📱{% else %}📖{% endif %}
+                                    </span>
+                                    <span style="font-size: 0.5rem; font-weight: 900; color: #94a3b8; text-transform: uppercase;">{{ session.number }}</span>
+                                </div>
+                            </div>
                         </div>
 
-                        <div style="position: relative; z-index: 1;">
-                            <div style="display: flex; justify-content: space-between; margin-bottom: 1rem;">
-                                <span style="font-size: 0.7rem; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8;">Сессия {{ session.number }}</span>
-                                {% if session.finish == "в процессе" %}
-                                    <span style="background: {{ book.bg_color }}; color: {{ book.text_color }}; padding: 2px 8px; border-radius: 4px; font-size: 0.65rem; font-weight: 800;">ЧИТАЮ</span>
-                                {% endif %}
+                        <!-- Инфо-подложка сессии -->
+                        <div style="display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 15px; background: #f8fafc; padding: 14px 20px; border-radius: 18px; border: 1px solid #f1f5f9;">
+                            <div>
+                                <div style="font-size: 0.6rem; font-weight: 800; color: #b4bfc9; text-transform: uppercase; margin-bottom: 2px;">{{ 'Время' if session.type == 'audio' else 'Объем' }}</div>
+                                <div style="font-size: 1.25rem; font-weight: 900;">{{ session.display_volume }}</div>
                             </div>
-
-                            <div style="display: flex; gap: 15px; align-items: center; margin-bottom: 1rem;">
-                                <div>
-                                    <div style="font-size: 0.95rem; font-weight: 700;">{{ session.start }}</div>
-                                    <div style="font-size: 0.65rem; color: #94a3b8; text-transform: uppercase;">Начало</div>
-                                </div>
-                                <div style="color: #cbd5e1;">→</div>
-                                <div>
-                                    <div style="font-size: 0.95rem; font-weight: 700; {% if session.finish == 'в процессе' %}color: var(--primary);{% endif %}">
-                                        {{ session.finish }}
-                                    </div>
-                                    <div style="font-size: 0.65rem; color: #94a3b8; text-transform: uppercase;">Конец</div>
-                                </div>
+                            <div>
+                                <div style="font-size: 0.6rem; font-weight: 800; color: #b4bfc9; text-transform: uppercase; margin-bottom: 2px;">Дней</div>
+                                <div style="font-size: 1.25rem; font-weight: 900; color: #475569;">{{ session.days or '—' }}</div>
                             </div>
-
-                            {% if session.days %}
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding-top: 1rem; border-top: 1px dashed #e2e8f0;">
-                                <div>
-                                    <div style="font-size: 1.2rem; font-weight: 800; color: var(--primary);">{{ session.days }}</div>
-                                    <div style="font-size: 0.65rem; color: #94a3b8; font-weight: 700; text-transform: uppercase;">Дней</div>
-                                </div>
-                                <div>
-                                    <div style="font-size: 1.2rem; font-weight: 800; color: #10b981;">{{ session.pages_per_day }}</div>
-                                    <div style="font-size: 0.65rem; color: #94a3b8; font-weight: 700; text-transform: uppercase;">Стр/День</div>
-                                </div>
+                            <div>
+                                <div style="font-size: 0.6rem; font-weight: 800; color: #b4bfc9; text-transform: uppercase; margin-bottom: 2px;">Темп</div>
+                                <div style="font-size: 1.15rem; font-weight: 900;">{{ session.pace or '—' }}</div>
                             </div>
-                            {% else %}
-                            <div style="font-size: 0.75rem; color: #cbd5e1; font-style: italic; padding-top: 1rem; border-top: 1px dashed #e2e8f0;">
-                                Аналитика темпа недоступна
-                            </div>
-                            {% endif %}
                         </div>
                     </div>
                     {% endfor %}
                 </div>
+                {% else %}
+                <div style="background: #f8fafc; border: 2px dashed #e2e8f0; border-radius: 24px; padding: 4rem; text-align: center; color: #94a3b8;">
+                    Лог чтения пока пуст
+                </div>
+                {% endif %}
             </div>
 
             <!-- Секция 10 рейтинговых параметров -->

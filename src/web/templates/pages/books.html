@@ -110,11 +110,12 @@
             {% endfor %}
         </select>
 
-        <!-- Формат -->
         <select name="book_format" class="filter-select">
             <option value="">Все форматы</option>
             {% for f in all_formats %}
-            <option value="{{ f.id }}" {{ 'selected' if current_format == f.id }}>{{ f.label }}</option>
+            <option value="{{ f.id }}" {{ 'selected' if current_format == f.id }}>
+                {{ f.label }}
+            </option>
             {% endfor %}
         </select>
 
