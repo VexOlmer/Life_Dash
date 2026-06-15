@@ -174,7 +174,17 @@
                             
                             <div style="display: flex; gap: 8px; align-items: center;">
                                 {% if session.finish == "в процессе" %}
-                                    <span style="background: #f5f3ff; color: #6366f1; padding: 6px 12px; border-radius: 10px; font-size: 0.65rem; font-weight: 800; text-transform: uppercase; border: 1px solid #ddd6fe; flex-shrink: 0;">Читаю</span>
+                                    <div style="display: flex; gap: 8px; align-items: center;">
+                                    {% if session.session_status == "reading" %}
+                                        <span style="background: #f5f3ff; color: #6366f1; padding: 6px 12px; border-radius: 10px; font-size: 0.65rem; font-weight: 800; text-transform: uppercase; border: 1px solid #ddd6fe; flex-shrink: 0;">
+                                            {% if session.format == 'audio' %}Слушаю{% else %}Читаю{% endif %}
+                                        </span>
+                                    {% elif session.session_status == "dropped" %}
+                                        <span style="background: #fff5f5; color: #fa5252; padding: 6px 12px; border-radius: 10px; font-size: 0.65rem; font-weight: 800; text-transform: uppercase; border: 1px solid #ffe3e3; flex-shrink: 0;">
+                                            Брошено
+                                        </span>
+                                    {% endif %}
+                                </div>
                                 {% endif %}
                                 
                                 <!-- Язык сессии -->
