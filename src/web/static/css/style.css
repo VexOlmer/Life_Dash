@@ -154,7 +154,31 @@ body {
 .btn-reset { display: flex; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: 10px; border: 1px solid var(--border); color: var(--text-muted); text-decoration: none; font-size: 1.2rem; }
 .btn-reset:hover { background: #fee2e2; color: #ef4444; }
 
-.order-toggle { display: flex; align-items: center; justify-content: center; width: 45px; height: 45px; background: white; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; color: var(--text-muted); font-weight: 800; }
+.order-toggle { 
+    display: flex; 
+    align-items: center; 
+    justify-content: center; 
+    width: 45px; 
+    height: 45px; 
+    background: white; 
+    border: 1px solid var(--border); 
+    border-radius: 12px; 
+    text-decoration: none; 
+    color: var(--text-muted); 
+    font-weight: 800; 
+    font-size: 1.1rem; 
+    transition: all 0.2s ease;
+}
+
+.order-toggle:hover { 
+    border-color: var(--primary); 
+    color: var(--primary); 
+    background: #f5f3ff;
+    
+    /* НОВЫЕ СТРОКИ: */
+    transform: translateY(-2px); /* Поднимаем кнопку */
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.15); /* Добавляем мягкое свечение */
+}
 .page-button { width: 40px; height: 45px; font-weight: 700; border-radius: 12px; display: flex; align-items: center; justify-content: center; text-decoration: none; background: white; border: 1px solid var(--border); color: var(--text-muted); }
 .page-button.active { background: var(--primary) !important; color: white !important; }
 
@@ -231,4 +255,87 @@ body {
 .list-header.game-grid span:nth-child(n+7):nth-child(-n+13) {
     text-align: right;
     padding-right: 2px;
+}
+
+
+/* --- ОБНОВЛЕННАЯ ПАНЕЛЬ ФИЛЬТРОВ --- */
+.filter-panel {
+    display: flex;
+    align-items: flex-end; /* Выравнивание по низу, чтобы лейблы были сверху */
+    gap: 16px;
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(15px); /* Эффект матового стекла */
+    padding: 20px;
+    border-radius: 24px;
+    margin-bottom: 2.5rem;
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    box-shadow: var(--shadow);
+}
+
+.filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 1; /* Растягиваем фильтры равномерно */
+}
+
+.filter-group label {
+    font-size: 0.65rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+    padding-left: 4px;
+}
+
+.filter-control-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.filter-icon {
+    position: absolute;
+    left: 14px;
+    font-size: 1rem;
+    pointer-events: none;
+    z-index: 1;
+}
+
+/* Переопределяем старый select */
+.filter-panel .filter-select {
+    width: 100%;
+    padding: 12px 12px 12px 40px !important; /* Отступ слева под иконку */
+    background-color: white;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    font-size: 0.85rem;
+    font-weight: 700;
+    transition: all 0.2s ease;
+}
+
+.filter-panel .filter-select:hover {
+    border-color: var(--primary);
+    background: white;
+}
+
+/* Подсветка, если фильтр выбран (is-active добавим через Jinja) */
+.filter-select.is-active {
+    background-color: #f5f3ff !important;
+    border-color: var(--primary);
+    color: var(--primary);
+}
+
+.filter-separator {
+    width: 1px;
+    height: 40px;
+    background: var(--border);
+    margin: 0 8px;
+    opacity: 0.5;
+}
+
+.status-watched {
+    background: #e0e7ff !important; /* Нежно-синий/индиго */
+    color: #4338ca !important;
+    border: 1px solid #c7d2fe;
 }

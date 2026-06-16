@@ -91,6 +91,23 @@ class Game(SQLModel, table=True):
         if not (0 <= v <= 10):
             raise ValueError("Рейтинг должен быть в диапазоне от 0 до 10")
         return v
+    
+    @field_validator("purchase_date", mode="before")
+    @classmethod
+    def validate_purchase_date(cls, v: Any) -> str | None:
+        """Переворачиваем дату покупки в ISO формат для сохранения в БД."""
+        if not v or v == "None" or v == "":
+            return None
+        v_str = str(v).strip()
+        # Если дата уже в формате ГГГГ-ММ-ДД (например, после обновления), оставляем
+        if re.match(r"\d{4}-\d{2}-\d{2}", v_str):
+            return v_str
+        # Если дата в формате ДД.ММ.ГГГГ, переворачиваем для базы
+        match = re.match(r"(\d{2})\.(\d{2})\.(\d{4})", v_str)
+        if match:
+            d, m, y = match.groups()
+            return f"{y}-{m}-{d}"
+        return v_str
 
 
     def __init__(self, **data: Any) -> None: # noqa: ANN401
@@ -125,6 +142,17 @@ class Game(SQLModel, table=True):
     def status_ru(self) -> str:
         """Возвращает локализованный статус игры."""
         return translate(self.status)
+    
+    @property
+    def purchase_date_ru(self) -> str:
+        """Вывод даты на сайте в привычном формате."""
+        if not self.purchase_date or self.purchase_date == "None":
+            return "—"
+        # Конвертируем обратно из ГГГГ-ММ-ДД в ДД.ММ.ГГГГ
+        parts = self.purchase_date.split("-")
+        if len(parts) == 3:
+            return f"{parts[2]}.{parts[1]}.{parts[0]}"
+        return self.purchase_date
 
     @property
     def cover_url(self) -> str:   
@@ -142,12 +170,27 @@ class Game(SQLModel, table=True):
     
     @property
     def progress_percent(self) -> int:
-        """Рассчитывает процент прохождения на основе затраченных часов к ожидаемым."""
-        if not self.hours_to_beat or self.hours_to_beat <= 0:
-            return 100 if self.status == "finished" else 0
+        """
+            Рассчитывает процент прохождения.
+            
+            Приоритет:
+            1. Если игра завершена (finished), всегда 100%.
+            2. Если игра в процессе и есть эталон (hours_to_beat), считаем долю.
+            3. Если эталона нет, но статус finished - 100%, иначе 0%.
+        """
         
-        percent = round((self.hours_played / self.hours_to_beat) * 100)
-        return min(percent, 100)
+        # Если игра завершена ИЛИ просмотрена — это 100%
+        if self.status in ["finished", "watched"]:
+            return 100
+        
+        # Если игра брошена, мы всё равно хотим видеть, как далеко ты зашел
+        # Или если она в процессе (playing)
+        if self.hours_to_beat and self.hours_to_beat > 0:
+            percent = round((self.hours_played / self.hours_to_beat) * 100)
+            return min(percent, 100)
+        
+        # Во всех остальных случаях (план или нет данных)
+        return 0
 
     # --- Обработка read_log ---
     @property
@@ -224,7 +267,7 @@ class Game(SQLModel, table=True):
                     "finish": "в процессе" if finish_str in ["...", ""] else finish_str,
                     "hours": hours,
                     "platform": platform,
-                    "comment": comment.replace("!", "").strip(),
+                    "comment": comment.replace("!", "").strip() or f"Сессия {i}",
                     "is_completion": is_completion,
                     "session_status": session_status, # "dropped", "playing" или None
                     "days": None,
@@ -253,10 +296,15 @@ class Game(SQLModel, table=True):
 
     # --- Аналитика Дат (Бэклог и Финал) ---
     def _parse_date(self, date_str: str | None) -> datetime | None:
-        if not date_str or len(date_str) < 10:
+        if not date_str or len(date_str) < 10 or date_str == "None":
             logger.warning(f"Ошибка парсинга даты - {date_str}. Дата пустая или меньше 10 символов.")
             return None
+        
         try:
+            # Пытаемся распарсить ГГГГ-ММ-ДД
+            if "-" in date_str:
+                return datetime.strptime(date_str[:10], "%Y-%m-%d")
+            # Пытаемся распарсить ДД.ММ.ГГГГ (на случай старых данных)
             return datetime.strptime(date_str[:10], "%d.%m.%Y")
         except Exception as e:
             logger.warning(f"Ошибка парсинга даты - {date_str}. Ошибка - {e}")

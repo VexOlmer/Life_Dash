@@ -32,6 +32,7 @@ async def list_games(
     platform: str | None = None,
     country: str | None = None,
     developer: str | None = None,
+    perfect: str | None = None,
 ) -> HTMLResponse:
     """
         Список игр с пагинацией, фильтрацией и расширенной сортировкой.
@@ -68,6 +69,20 @@ async def list_games(
         conditions.append(Game.country == country)
     if developer:
         conditions.append(Game.developer == developer)
+    if perfect:
+        if perfect == "100":
+            conditions.append(Game.percent_achievements == 100)
+        elif perfect == "75":
+            conditions.append(Game.percent_achievements >= 75)
+            conditions.append(Game.percent_achievements < 100)
+        elif perfect == "50":
+            conditions.append(Game.percent_achievements >= 50)
+            conditions.append(Game.percent_achievements < 75)
+        elif perfect == "25":
+            conditions.append(Game.percent_achievements >= 25)
+            conditions.append(Game.percent_achievements < 50)
+        elif perfect == "0":
+            conditions.append(Game.percent_achievements < 25)
 
     # --- 2. Базовый запрос ---
     filtered_stmt = select(Game)
@@ -165,6 +180,7 @@ async def list_games(
             "current_platform": platform or "",
             "current_country": country or "",
             "current_developer": developer or "",
+            "current_perfect": perfect or "",
             
             # Данные для пагинации
             "total_pages": total_pages,

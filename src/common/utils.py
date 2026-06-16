@@ -1,12 +1,14 @@
 """Утилиты для преобразования данных (перевод, форматирование)."""
 
 TRANSLATIONS: dict[str, str] = {
+    
     # Статусы
     "plan": "В планах",
     "reading": "Читаю",
     "finished": "Завершено",
     "dropped": "Брошено",
     "playing": "Играю",
+    "watched": "Просмотрено",
 
     # Форматы
     "paper": "Бумажная книга",
@@ -124,6 +126,10 @@ TRANSLATIONS: dict[str, str] = {
     "rating_immersion": "Погружение",
     "rating_replayability": "Реиграбельность",
     "rating_cult_status": "Культовость",
+    
+    # Платформы
+    "youtube": "YouTube",
+    "twitch": "Twitch",
 }
 
 def translate(key: str | None) -> str:
