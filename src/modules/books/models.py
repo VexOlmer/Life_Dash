@@ -347,7 +347,7 @@ class Book(SQLModel, table=True):
                     logger.warning(f"Пропуск сессии {i} в {self.title}: недостаточно полей (нужно 4, найдено {len(parts)})")
                     continue
 
-                # 1. Даты (обязательно)
+                # 1. Даты чтения (обязательно)
                 date_part = parts[0]
                 dates = date_part.split("-")
                 start_str = dates[0].strip()
@@ -375,7 +375,7 @@ class Book(SQLModel, table=True):
                     disp_vol = f"{vol_val} стр"
                     s_type = "book"
                     
-                # Определение статуса сессии
+                # --- Определение статуса сессии ---
                 is_last = (i == total_entries)
                 has_no_finish = (finish_str in ["...", ""])
                 session_status = None # По умолчанию завершенная сессия

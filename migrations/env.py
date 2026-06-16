@@ -8,6 +8,7 @@ from sqlmodel import SQLModel
 
 from src.core.config import settings
 from src.modules.books.models import Book
+from src.modules.games.models import Game
 
 # Interpret the config file for Python logging.
 config = context.config

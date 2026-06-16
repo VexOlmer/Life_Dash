@@ -134,7 +134,7 @@
     <div id="sync-report"></div>
 
     <div class="books-list">
-        <div class="list-header">
+        <div class="list-header book-grid">
             <span style="text-align: center;">№</span> <!-- Порядковый номер -->
             <span style="text-align: center;">Рейт.</span>
             <span></span> <!-- Обложка (пусто) -->
@@ -149,7 +149,7 @@
         </div>
 
         {% for book in books %}
-        <a href="/books/{{ book.id }}" class="book-row" style="background-color: {{ book.bg_color }}; color: {{ book.text_color }};">
+        <a href="/books/{{ book.id }}" class="book-row book-grid" style="background-color: {{ book.bg_color }}; color: {{ book.text_color }};">
 
             <!-- Порядковый номер с учетом страницы -->
             <span class="row-number">{{ showing_from + loop.index0 }}</span>

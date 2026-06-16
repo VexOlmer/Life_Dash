@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from src.core.config import settings
 from src.core.logger import logger
 from src.modules.books.router import router as books_router
+from src.modules.games.router import router as games_router
 from src.web.router import router as web_router
 
 
@@ -47,8 +48,9 @@ app = FastAPI(
 app.mount("/static", StaticFiles(directory="src/web/static"), name="static")
 app.mount("/vault", StaticFiles(directory=str(settings.OBSIDIAN_VAULT_PATH)), name="vault")
 
-app.include_router(web_router)    # Главная страница (/)
-app.include_router(books_router)  # Модуль книг (/books)
+app.include_router(web_router)      # Главная страница (/)
+app.include_router(books_router)    # Модуль книг (/books)
+app.include_router(games_router)    # Модуль игр (/games)
 
 
 @app.get("/health")

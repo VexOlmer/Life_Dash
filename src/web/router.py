@@ -1,36 +1,17 @@
 """Роутер для основных страниц сайта."""
 
-from typing import Annotated, Any
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlmodel import Session, func, select
 
+from src.core.cache import stats_cache
 from src.core.database import get_session
 from src.core.logger import logger
 from src.modules.books.models import Book
-
-
-class StatsCache:
-    """Кеш статистики с главной страницы. Обновляется каждый раз после синхронизации."""
-    def __init__(self) -> None:
-        """Создаем пустой кеш статистики главной страницы."""
-        self._data: dict[str, Any] | None = None
-
-    def get(self) -> dict[str, Any] | None:
-        """Возвращаем текущий кеш статистики."""
-        return self._data
-
-    def set(self, data: dict[str, Any]) -> None:
-        """Обновление текущего кеша."""
-        self._data = data
-
-    def clear(self) -> None:
-        """Очистка текущего кеша."""
-        self._data = None
-
-stats_cache = StatsCache()
+from src.modules.games.models import Game
 
 router = APIRouter(tags=["Web"])
 templates = Jinja2Templates(directory="src/web/templates")
@@ -48,12 +29,18 @@ async def index(request: Request, session: SessionDep) -> HTMLResponse:
             "pages/index.html", {"request": request, "stats": cached_stats}
         )
 
-    # Если кэша нет — считаем
+    # --- Статистика блока книг ---
     total_books = session.exec(select(func.count()).select_from(Book)).one()
     total_pages = session.exec(select(func.sum(Book.total))).one() or 0
     avg_rating = session.exec(select(func.avg(Book.total_rating))).one() or 0
     finished_books = session.exec(select(func.count()).where(Book.status == "finished")).one()
     reading_books = session.exec(select(func.count()).where(Book.status == "reading")).one()
+    
+    # --- Статистика блока игр ---
+    total_games = session.exec(select(func.count()).select_from(Game)).one()
+    total_hours = session.exec(select(func.sum(Game.hours_played))).one() or 0
+    perfect_games = session.exec(select(func.count()).where(Game.percent_achievements == 100)).one()
+    avg_game_rating = session.exec(select(func.avg(Game.total_rating))).one() or 0
 
     new_stats = {
         "books": {
@@ -62,6 +49,12 @@ async def index(request: Request, session: SessionDep) -> HTMLResponse:
             "avg": round(avg_rating, 1),
             "finished": finished_books,
             "reading": reading_books
+        },
+        "games": {
+            "total": total_games,
+            "hours": round(total_hours, 1),
+            "perfect": perfect_games,
+            "avg": round(avg_game_rating, 1)
         }
     }
     logger.debug(f"Обновленная статистика - {new_stats}")
