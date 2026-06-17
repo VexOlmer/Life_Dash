@@ -115,6 +115,8 @@ TRANSLATIONS: dict[str, str] = {
     "interactive drama": "Интерактивное кино",
     "soulslike": "Soulslike",
     "vr": "VR",
+    "indie": "Инди",
+    "pixel-art": "Пиксель-арт",
 
     # Доп рейтинги из игр
     "rating_optimization": "Оптимизация",

@@ -67,9 +67,9 @@ class GameTransformer:
             status=meta.get("status", "plan"),
             genres=str(meta.get("genres", "")),
             series=meta.get("series"),
-            price=int(meta.get("price", 0)),
-            purchase_date=str(meta.get("purchase_date", "")),
-            digital_dist=meta.get("digital_dist", "Steam"),
+            price=int(meta.get("price", 0)) if meta.get("price") else None,
+            purchase_date=str(meta.get("purchase_date", None)),
+            digital_dist=meta.get("digital_dist", None),
             
             developer=meta.get("developer", "Unknown"),
             publisher=meta.get("publisher", "Unknown"),
@@ -104,5 +104,5 @@ class GameTransformer:
             
             file_path=str(file_path.relative_to(vault_path)),
             last_modified=mtime,
-            created_at=str(meta.get("created", ""))
+            created_at=str(meta.get("created", "")),
         )

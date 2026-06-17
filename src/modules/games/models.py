@@ -23,9 +23,9 @@ class Game(SQLModel, table=True):
     status: str = "plan"
     genres: str
     series: str | None = None
-    price: int = 0
+    price: int | None = None
     purchase_date: str | None = None  # dd.mm.yyyy
-    digital_dist: str = "Steam"
+    digital_dist: str | None = None
     
     developer: str = "Unknown"
     publisher: str = "Unknown"

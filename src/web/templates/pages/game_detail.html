@@ -61,7 +61,7 @@
                 <!-- Рейтинги Справа -->
                 <div style="text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 1rem; min-width: 150px;">
                     <div style="background: rgba(255,255,255,0.12); padding: 20px 30px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.2); backdrop-filter: blur(8px); text-align: center;">
-                        <div style="font-size: 3.5rem; font-weight: 900; line-height: 1;">{{ game.total_rating|int }}</div>
+                        <div style="font-size: 3.5rem; font-weight: 900; line-height: 1;">{{ game.total_rating|round(1) }}</div>
                         <div style="text-transform: uppercase; font-size: 0.65rem; font-weight: 800; opacity: 0.8;">My Score</div>
                     </div>
                     
@@ -97,8 +97,11 @@
                     <h4 style="color: #a4b0be; text-transform: uppercase; font-size: 0.7rem; font-weight: 800; letter-spacing: 1px;">Приобретение</h4>
                     <ul style="list-style: none; padding: 0; margin: 1rem 0; line-height: 1.8;">
                         <li><strong>Дата:</strong> {{ game.purchase_date_ru }}</li>
-                        <li><strong>Цена:</strong> {{ game.price }} ₽</li>
-                        <li><strong>Магазин:</strong> {{ game.digital_dist }}</li>
+                        <li>
+                            <strong>Цена:</strong> 
+                            {{ "{:,}".format(game.price).replace(",", " ") + " ₽" if (game.price or 0) > 0 else "—" }}
+                        </li>
+                        <li><strong>Магазин:</strong> {{ game.digital_dist or "—" }}</li>
                     </ul>
                 </div>
 
@@ -107,13 +110,13 @@
                     <h4 style="color: #a4b0be; text-transform: uppercase; font-size: 0.7rem; font-weight: 800; letter-spacing: 1px;">Прохождение</h4>
                     
                     <!-- Твои часы -->
-                    <div style="font-size: 3.5rem; font-weight: 900; line-height: 1; margin-top: 1rem;">{{ game.hours_played|int }}</div>
+                    <div style="font-size: 3.5rem; font-weight: 900; line-height: 1; margin-top: 1rem;">{{ game.hours_played|round(1) }}</div>
                     <div style="text-transform: uppercase; font-size: 0.7rem; font-weight: 800; color: #94a3b8; margin-bottom: 1.5rem;">часов в игре</div>
 
                     <!-- Среднее время (стиль как у агрегаторов) -->
                     {% if game.hours_to_beat %}
                     <div style="text-align: center; border: 1px solid #e2e8f0; padding: 10px 15px; border-radius: 16px; min-width: 100px; background: #f8fafc;">
-                        <div style="font-size: 1.2rem; font-weight: 900; color: #475569;">{{ game.hours_to_beat|int }}ч</div>
+                        <div style="font-size: 1.2rem; font-weight: 900; color: #475569;">{{ game.hours_to_beat|round(1) }}ч</div>
                         <div style="font-size: 0.55rem; font-weight: 800; text-transform: uppercase; color: #94a3b8; letter-spacing: 0.5px; margin-top: 2px;">HLTB AVG</div>
                     </div>
                     {% endif %}
