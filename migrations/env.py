@@ -9,6 +9,8 @@ from alembic import context
 from src.core.config import settings
 from src.modules.books.models import Book
 from src.modules.games.models import Game
+from src.modules.daily.models import TimeLog
+from src.modules.daily.models import DailyNote
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

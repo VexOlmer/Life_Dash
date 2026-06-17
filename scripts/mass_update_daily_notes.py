@@ -33,198 +33,261 @@ class UpdateStrategy(ABC):
         pass
 
 
-class AddAnchorsStrategy(UpdateStrategy):
-    """
-        Стратегия добавления комментариев-анкеров в ежедневные заметки.
+# class AddAnchorsStrategy(UpdateStrategy):
+#     """
+#         Стратегия добавления комментариев-анкеров в ежедневные заметки.
         
-        Добавляет анкерные комментарии в разделы активности и тренировок.
-    """
+#         Добавляет анкерные комментарии в разделы активности и тренировок.
+#     """
     
-    def __init__(self) -> None:
-        """Инициализирует паттерны для поиска секций."""
+#     def __init__(self) -> None:
+#         """Инициализирует паттерны для поиска секций."""
         
-        # Паттерн для поиска секции общей активности
-        self._general_activity_pattern = re.compile(
-            r'(### Общая активность\n)(.*?)(?=\n### Тренировки|\n## |$)',
-            re.DOTALL
-        )
+#         # Паттерн для поиска секции общей активности
+#         self._general_activity_pattern = re.compile(
+#             r'(### Общая активность\n)(.*?)(?=\n### Тренировки|\n## |$)',
+#             re.DOTALL
+#         )
         
-        # Паттерны для поиска блоков тренировок
-        self._training_patterns = {
-            r'#### 🏋️ Силовая': 'STRENGTH',
-            r'#### ❤️ Кардио': 'CARDIO',
-            r'#### 🚴 Велосипед': 'BIKE',
-            r'#### 🏊 Бассейн': 'SWIM',
-            r'#### ⛷️ Лыжи': 'SKI',
-        }
+#         # Паттерны для поиска блоков тренировок
+#         self._training_patterns = {
+#             r'#### 🏋️ Силовая': 'STRENGTH',
+#             r'#### ❤️ Кардио': 'CARDIO',
+#             r'#### 🚴 Велосипед': 'BIKE',
+#             r'#### 🏊 Бассейн': 'SWIM',
+#             r'#### ⛷️ Лыжи': 'SKI',
+#         }
     
-    def get_name(self) -> str:  # noqa: D102
-        return "Добавление анкеров"
+#     def get_name(self) -> str:  # noqa: D102
+#         return "Добавление анкеров"
     
-    def apply(self, content: str) -> str:
-        """
-            Применяет добавление анкеров к содержимому.
+#     def apply(self, content: str) -> str:
+#         """
+#             Применяет добавление анкеров к содержимому.
             
-            Args:
-                content: Исходное содержимое заметки.
+#             Args:
+#                 content: Исходное содержимое заметки.
                 
-            Returns:
-                Содержимое с добавленными анкерами.
-        """
+#             Returns:
+#                 Содержимое с добавленными анкерами.
+#         """
         
-        content = self._add_anchors_to_general_activity(content)
-        content = self._add_anchors_to_trainings(content)
+#         content = self._add_anchors_to_general_activity(content)
+#         content = self._add_anchors_to_trainings(content)
         
-        return content
+#         return content
     
-    def _add_anchors_to_general_activity(self, content: str) -> str:
-        """
-            Добавляет анкеры в секцию общей активности и вечерней прогулки.
+#     def _add_anchors_to_general_activity(self, content: str) -> str:
+#         """
+#             Добавляет анкеры в секцию общей активности и вечерней прогулки.
 
-            Args:
-                content: Исходное содержимое заметки.
+#             Args:
+#                 content: Исходное содержимое заметки.
 
-            Returns:
-                Содержимое с добавленными анкерами.
-        """
+#             Returns:
+#                 Содержимое с добавленными анкерами.
+#         """
         
-        match = self._general_activity_pattern.search(content)
-        if not match:
-            return content
+#         match = self._general_activity_pattern.search(content)
+#         if not match:
+#             return content
 
-        header = match.group(1)
-        body = match.group(2)
+#         header = match.group(1)
+#         body = match.group(2)
 
-        # Удаление дублирующихся переносов строк
-        body = re.sub(r'\n\s*\n+', '\n', body)
+#         # Удаление дублирующихся переносов строк
+#         body = re.sub(r'\n\s*\n+', '\n', body)
 
-        if '<!-- GENERAL_ACTIVITY_START -->' in body:
-            return content
+#         if '<!-- GENERAL_ACTIVITY_START -->' in body:
+#             return content
 
-        # Начинаем с открывающего анкера
-        new_body = '<!-- GENERAL_ACTIVITY_START -->\n' + body
+#         # Начинаем с открывающего анкера
+#         new_body = '<!-- GENERAL_ACTIVITY_START -->\n' + body
 
-        # Добавляем анкер для прогулки
-        walk_token = '- 🌙 Вечерняя прогулка:'
-        if walk_token in body:
-            walk_re = re.compile(rf'({walk_token}\n(?:  - .*\n)*)', re.DOTALL)
-            walk_match = walk_re.search(new_body)
-            if walk_match and '<!-- WALK_START -->' not in walk_match.group(1):
-                walk_block = walk_match.group(1)
-                replacement = f'\n<!-- WALK_START -->\n{walk_block}<!-- WALK_END -->\n\n'  # noqa: E501
-                new_body = new_body.replace(walk_block, replacement)
+#         # Добавляем анкер для прогулки
+#         walk_token = '- 🌙 Вечерняя прогулка:'
+#         if walk_token in body:
+#             walk_re = re.compile(rf'({walk_token}\n(?:  - .*\n)*)', re.DOTALL)
+#             walk_match = walk_re.search(new_body)
+#             if walk_match and '<!-- WALK_START -->' not in walk_match.group(1):
+#                 walk_block = walk_match.group(1)
+#                 replacement = f'\n<!-- WALK_START -->\n{walk_block}<!-- WALK_END -->\n\n'  # noqa: E501
+#                 new_body = new_body.replace(walk_block, replacement)
 
-        # Обработка разделителя в конце
-        if new_body.endswith('---'):
-            new_body = new_body[:-3].rstrip() + '\n<!-- GENERAL_ACTIVITY_END -->\n\n---'
-        else:
-            new_body = new_body.rstrip() + '\n<!-- GENERAL_ACTIVITY_END -->\n\n---'
+#         # Обработка разделителя в конце
+#         if new_body.endswith('---'):
+#             new_body = new_body[:-3].rstrip() + '\n<!-- GENERAL_ACTIVITY_END -->\n\n---'
+#         else:
+#             new_body = new_body.rstrip() + '\n<!-- GENERAL_ACTIVITY_END -->\n\n---'
 
-        return content.replace(match.group(0), header + new_body)
+#         return content.replace(match.group(0), header + new_body)
 
-    def _add_anchors_to_trainings(self, content: str) -> str:
-        """
-            Добавляет анкеры для каждого типа тренировок.
+#     def _add_anchors_to_trainings(self, content: str) -> str:
+#         """
+#             Добавляет анкеры для каждого типа тренировок.
 
-            Args:
-                content: Исходное содержимое заметки.
+#             Args:
+#                 content: Исходное содержимое заметки.
 
-            Returns:
-                Обновленное содержимое.
-        """
+#             Returns:
+#                 Обновленное содержимое.
+#         """
         
-        for pattern, anchor_name in self._training_patterns.items():
-            training_regex = re.compile(
-                rf'({pattern}.*?)(?=\n#### |\n## |$)',
-                re.DOTALL
-            )
+#         for pattern, anchor_name in self._training_patterns.items():
+#             training_regex = re.compile(
+#                 rf'({pattern}.*?)(?=\n#### |\n## |$)',
+#                 re.DOTALL
+#             )
 
-            matches = list(training_regex.finditer(content))
+#             matches = list(training_regex.finditer(content))
 
-            # Обратный порядок, чтобы сохранять корректность индексов при замене
-            for match in reversed(matches):
-                block = match.group(1)
-                if f'<!-- {anchor_name}_START -->' in content:
-                    continue
+#             # Обратный порядок, чтобы сохранять корректность индексов при замене
+#             for match in reversed(matches):
+#                 block = match.group(1)
+#                 if f'<!-- {anchor_name}_START -->' in content:
+#                     continue
 
-                if block.endswith('---'):
-                    block = block[:-3]
+#                 if block.endswith('---'):
+#                     block = block[:-3]
                 
-                block = block.strip()
+#                 block = block.strip()
 
-                new_block = (
-                    f'<!-- {anchor_name}_START -->\n'
-                    f'{block}\n'
-                    f'<!-- {anchor_name}_END -->\n\n---'
-                )
-                content = (
-                    content[:match.start(1)] + 
-                    new_block + 
-                    content[match.end(1):]
-                )
+#                 new_block = (
+#                     f'<!-- {anchor_name}_START -->\n'
+#                     f'{block}\n'
+#                     f'<!-- {anchor_name}_END -->\n\n---'
+#                 )
+#                 content = (
+#                     content[:match.start(1)] + 
+#                     new_block + 
+#                     content[match.end(1):]
+#                 )
 
-        return content
+#         return content
 
 
-class CleanMetadataStrategy(UpdateStrategy):
-    """
-        Стратегия очистки метаданных и добавления анкеров в заметки Obsidian.
+# class CleanMetadataStrategy(UpdateStrategy):
+#     """
+#         Стратегия очистки метаданных и добавления анкеров в заметки Obsidian.
         
-        Удаляет специфические теги и пустые алиасы из YAML блока.
-    """
+#         Удаляет специфические теги и пустые алиасы из YAML блока.
+#     """
     
-    def get_name(self) -> str:  # noqa: D102
-        return "Очистка метаданных"
+#     def get_name(self) -> str:  # noqa: D102
+#         return "Очистка метаданных"
     
-    def apply(self, content: str) -> str:
-        """
-            Применяет очистку метаданных к содержимому.
+#     def apply(self, content: str) -> str:
+#         """
+#             Применяет очистку метаданных к содержимому.
             
-            Args:
-                content: Исходное содержимое заметки.
+#             Args:
+#                 content: Исходное содержимое заметки.
                 
-            Returns:
-                Содержимое с очищенными метаданными.
-        """
-        return self._clean_frontmatter(content)
+#             Returns:
+#                 Содержимое с очищенными метаданными.
+#         """
+#         return self._clean_frontmatter(content)
     
-    def _clean_frontmatter(self, content: str) -> str:
-        """
-            Удаляет специфические теги и пустые алиасы из YAML блока.
+#     def _clean_frontmatter(self, content: str) -> str:
+#         """
+#             Удаляет специфические теги и пустые алиасы из YAML блока.
 
-            Если в блоке 'tags' указано только '- daily', удаляется весь блок тегов.
-            Если 'aliases' пуст ([]), строка удаляется.
+#             Если в блоке 'tags' указано только '- daily', удаляется весь блок тегов.
+#             Если 'aliases' пуст ([]), строка удаляется.
 
-            Args:
-                content: Полный текст заметки.
+#             Args:
+#                 content: Полный текст заметки.
 
-            Returns:
-                Текст с обновленным (очищенным) YAML блоком.
-        """
+#             Returns:
+#                 Текст с обновленным (очищенным) YAML блоком.
+#         """
         
-        # Находим Frontmatter (между первыми двумя ---)
-        frontmatter_match = re.search(r'^---\n(.*?)\n---', content, re.DOTALL)
-        if not frontmatter_match:
-            return content
+#         # Находим Frontmatter (между первыми двумя ---)
+#         frontmatter_match = re.search(r'^---\n(.*?)\n---', content, re.DOTALL)
+#         if not frontmatter_match:
+#             return content
 
-        original_fm = frontmatter_match.group(0)
-        inner_fm = frontmatter_match.group(1)
+#         original_fm = frontmatter_match.group(0)
+#         inner_fm = frontmatter_match.group(1)
 
-        # 1. Удаляем блок tags, если там только daily
-        # Ищем 'tags:' за которым следует новая строка, пробелы и '- daily'
-        tags_pattern = r'tags:\n\s+-\s+daily\s*\n?'
-        inner_fm = re.sub(tags_pattern, '', inner_fm)
+#         # 1. Удаляем блок tags, если там только daily
+#         # Ищем 'tags:' за которым следует новая строка, пробелы и '- daily'
+#         tags_pattern = r'tags:\n\s+-\s+daily\s*\n?'
+#         inner_fm = re.sub(tags_pattern, '', inner_fm)
 
-        # 2. Удаляем пустые алиасы
-        # Ищем 'aliases: []' с возможными пробелами
-        aliases_pattern = r'aliases:\s*\[\]\s*\n?'
-        inner_fm = re.sub(aliases_pattern, '', inner_fm)
+#         # 2. Удаляем пустые алиасы
+#         # Ищем 'aliases: []' с возможными пробелами
+#         aliases_pattern = r'aliases:\s*\[\]\s*\n?'
+#         inner_fm = re.sub(aliases_pattern, '', inner_fm)
 
-        # Подчищаем возможные лишние пустые строки в конце после удаления
-        inner_fm = inner_fm.strip()
+#         # Подчищаем возможные лишние пустые строки в конце после удаления
+#         inner_fm = inner_fm.strip()
 
-        new_fm = f"---\n{inner_fm}\n---"
-        return content.replace(original_fm, new_fm)
+#         new_fm = f"---\n{inner_fm}\n---"
+#         return content.replace(original_fm, new_fm)
+
+
+# class AddCityStrategy(UpdateStrategy):
+#     """
+#         Стратегия добавления поля city в метаданные заметки.
+        
+#         Добавляет поле city: Omsk в YAML блок, если оно отсутствует.
+#     """
+    
+#     def get_name(self) -> str:
+#         """Вывод типа операции."""
+#         return "Добавление города"
+    
+#     def apply(self, content: str) -> str:
+#         """
+#             Добавляет поле city в frontmatter.
+            
+#             Args:
+#                 content: Исходное содержимое заметки.
+                
+#             Returns:
+#                 Содержимое с добавленным полем city.
+#         """
+#         return self._add_city_to_frontmatter(content)
+    
+#     def _add_city_to_frontmatter(self, content: str) -> str:
+#         """
+#             Добавляет поле city: Omsk в YAML блок.
+            
+#             Args:
+#                 content: Полный текст заметки.
+                
+#             Returns:
+#                 Текст с обновленным YAML блоком.
+#         """
+        
+#         # Находим Frontmatter (между первыми двумя ---)
+#         frontmatter_match = re.search(r'^---\n(.*?)\n---', content, re.DOTALL)
+#         if not frontmatter_match:
+#             return content
+        
+#         original_fm = frontmatter_match.group(0)
+#         inner_fm = frontmatter_match.group(1)
+        
+#         # Проверяем, есть ли уже поле city
+#         if re.search(r'^city:\s*', inner_fm, re.MULTILINE):
+#             return content
+        
+#         # Добавляем city после created или в конец блока
+#         # Ищем created: и вставляем после него
+#         created_match = re.search(r'^(created:\s*.*?)$', inner_fm, re.MULTILINE)
+#         if created_match:
+#             # Вставляем после created
+#             new_inner = inner_fm.replace(
+#                 created_match.group(0),
+#                 created_match.group(0) + '\ncity: Omsk'
+#             )
+#         else:
+#             # Если created нет, добавляем в начало блока
+#             new_inner = 'city: Omsk\n' + inner_fm
+        
+#         new_fm = f"---\n{new_inner}\n---"
+#         return content.replace(original_fm, new_fm)
 
 
 class DailyNoteUpdater:
@@ -383,17 +446,14 @@ class DailyNoteUpdater:
 def main() -> None:
     """Запускает основной процесс обновления заметок."""
     
-    notes_directory = r"C:\Knowledge_Base\Knowledge_Base\periodic\daily\2025"
+    notes_directory = r"C:\Knowledge_Base\Knowledge_Base\periodic\daily\2026"
 
     try:
-        strategies = [
-            AddAnchorsStrategy(),      # Добавление анкеров
-            CleanMetadataStrategy(),   # Очистка метаданных
-        ]
+        # strategies = [
+        #     AddCityStrategy(),
+        # ]
         
-        # Или можно использовать только одну стратегию:
-        # strategies = [AddAnchorsStrategy()]
-        # strategies = [CleanMetadataStrategy()]
+        strategies = []
         
         updater = DailyNoteUpdater(notes_directory, strategies=strategies, backup=False)
         updater.run()
@@ -405,5 +465,5 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    # main()
+    #main()
     pass
