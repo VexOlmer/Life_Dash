@@ -9,7 +9,7 @@ class TimeLog(SQLModel, table=True):
     """Строки активности из раздела Время."""    
     id: int | None = Field(default=None, primary_key=True)
     
-    service: str  # Steam, Youtube, Работа
+    service: str  # Steam, Youtube, Работа, Разное
     subject: str  # Red Dead Redemption 2, Ростелеком, Властелин колец
     category_tag: str | None = None  # g, f, s, ch
     
@@ -28,6 +28,10 @@ class DailyNote(SQLModel, table=True):
     sleep_from: str | None = None
     sleep_to: str | None = None
     nap_mins: int = 0
+    
+    # Дневник самоконтроля
+    morning_workout: str | None = None
+    added_sugar: str | None = None
     
     # Здоровье
     weight: float | None = None

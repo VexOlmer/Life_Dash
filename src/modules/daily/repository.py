@@ -18,7 +18,17 @@ class DailyRepository(BaseRepository[DailyNote]):
         return self.session.exec(select(DailyNote).where(DailyNote.date == date_str)).first()
 
     def upsert_daily(self, note: DailyNote, logs: list[TimeLog]) -> None:
-        """Обновляет день и связанные логи времени."""
+        """
+            Обновляет день и связанные логи времени.
+            
+            Args:
+                note: Данные ежедневной заметки.
+                logs: Список данных временных логов из ежедневной заметки.
+            
+            Returns:
+                None
+        """
+        
         existing = self.get_by_path(note.file_path)
         if existing:
             # Удаляем старые логи перед обновлением, чтобы не дублировать

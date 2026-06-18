@@ -26,10 +26,9 @@ async def daily_hub(
 ) -> HTMLResponse:
     """Рассчеты показателей ежедневных заметок для отображения на главной странице Дневника."""
     now = datetime.now()
+    
     # Сдвигаемся на вчера, чтобы не видеть "сегодня"
     reference_day = now - timedelta(days=1)
-    
-    # Текущие параметры из URL или по умолчанию
     target_year = year or reference_day.isocalendar()[0]
     target_week = week or reference_day.isocalendar()[1]
 
@@ -40,7 +39,7 @@ async def daily_hub(
     # 2. Получаем данные за целевую неделю
     current_week_data = DailyService.get_week_data(session, target_week, target_year)
     
-    # 3. Рассчитываем прошлую неделю (просто вычитаем 7 дней от нашего якоря)
+    # 3. Рассчитываем прошлую неделю и получаем ее данные
     prev_monday = current_monday - timedelta(days=7)
     prev_week_year, prev_week_num, _ = prev_monday.isocalendar()
     prev_week_data = DailyService.get_week_data(session, prev_week_num, prev_week_year)
@@ -49,7 +48,7 @@ async def daily_hub(
     next_monday = current_monday + timedelta(days=7)
     next_week_year, next_week_num, _ = next_monday.isocalendar()
     
-    # Агрегируем статистику за все 14 дней
+    # 5. Агрегируем статистику за все 14 дней
     stats = DailyService.get_aggregated_stats(session, current_week_data + prev_week_data)
     calendar = DailyService.get_calendar_structure(session)
 

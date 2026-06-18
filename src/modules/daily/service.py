@@ -1,6 +1,6 @@
 """Сервис для извлечения контента из ежедневных заметок."""
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from sqlmodel import Session, select
 
@@ -9,12 +9,23 @@ from .models import DailyNote
 
 class DailyService:
     """Класс обработки ежедневных заметок для информативного показа на дашборде сайта."""
+    
     @staticmethod
     def get_week_data(session: Session, week_number: int, year: int) -> dict[str: str | datetime]:
-        """Получает все записи за конкретную ISO-неделю."""
-        import datetime as dt_lib
-        start_date = dt_lib.date.fromisocalendar(year, week_number, 1)
+        """
+            Получает все записи за конкретную ISO-неделю.
+            
+            Args:
+                session: текущая сессия БД.
+                week_number: номер недели.
+                year: номер года.
+            
+            Returns:
+                dict[str: str | datetime]: данные недели в формате для отображения в html.
+        """
         
+        # Список дат в ISO-формате
+        start_date = date.fromisocalendar(year, week_number, 1)
         dates = [(start_date + timedelta(days=i)).isoformat() for i in range(7)]
         
         statement = select(DailyNote).where(DailyNote.date.in_(dates))
@@ -35,7 +46,17 @@ class DailyService:
 
     @staticmethod
     def get_aggregated_stats(session: Session, weeks_data: list) -> dict[str: int]:
-        """Считает средние и суммарные показатели за 14 дней."""
+        """
+            Считает средние и суммарные показатели за 14 дней.
+            
+            Args:
+                session: текущая сессия БД.
+                weeks_data: список данных за 2 недели.
+            
+            Returns:
+                dict[str: int]: рассчитанные значения показателей за 2 недели.
+        """
+        
         all_notes = [d["note"] for d in weeks_data if d["note"]]
         if not all_notes:
             return None
@@ -73,12 +94,14 @@ class DailyService:
     def get_calendar_structure(session: Session) -> dict:
         """Подготовка данных для мини-календаря (список всех дат, где есть заметки)."""
         dates = session.exec(select(DailyNote.date)).all()
-        # Группируем по годам и месяцам для UI
+        # Группируем по годам -> месяцам -> дням для UI
         structure = {}
         for d in sorted(dates, reverse=True):
             dt = datetime.strptime(d, "%Y-%m-%d")
             y, m = dt.year, dt.month
-            if y not in structure: structure[y] = {}
-            if m not in structure[y]: structure[y][m] = []
+            if y not in structure:
+                structure[y] = {}
+            if m not in structure[y]:
+                structure[y][m] = []
             structure[y][m].append(d)
         return structure

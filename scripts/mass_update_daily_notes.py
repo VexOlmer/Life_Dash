@@ -290,6 +290,80 @@ class UpdateStrategy(ABC):
 #         return content.replace(original_fm, new_fm)
 
 
+class DiaryFormatStrategy(UpdateStrategy):
+    """
+        Стратегия замены тире на двоеточие в блоке дневника самоконтроля.
+        
+        Преобразует формат:
+            - ☀️Утренняя разминка - Нет
+            в:
+            - ☀️Утренняя разминка: Нет
+    """
+    
+    def get_name(self) -> str:
+        """Возвращение наименования применяемой стратегии."""
+        return "Форматирование дневника"
+    
+    def apply(self, content: str) -> str:
+        """
+            Применяет замену тире на двоеточие в секции дневника.
+            
+            Args:
+                content: Исходное содержимое заметки.
+                
+            Returns:
+                Содержимое с отформатированным дневником.
+        """
+        return self._format_diary_section(content)
+    
+    def _format_diary_section(self, content: str) -> str:
+        """
+            Находит блок дневника самоконтроля и заменяет тире на двоеточие.
+            
+            Args:
+                content: Полный текст заметки.
+                
+            Returns:
+                Текст с отформатированным блоком дневника.
+        """
+        
+        # Паттерн для поиска секции дневника
+        diary_pattern = re.compile(
+            r'(## 📒Дневник самоконтроля\n)(.*?)(?=\n## |\n---|$)',
+            re.DOTALL
+        )
+        
+        match = diary_pattern.search(content)
+        if not match:
+            return content
+        
+        header = match.group(1)
+        body = match.group(2)
+        
+        # Проверяем, есть ли что менять
+        if not re.search(r'-\s*[^:]+-\s*', body):
+            return content
+        
+        # Заменяем тире на двоеточие в строках вида "- текст - значение"
+        # Паттерн ищет: дефис, пробел, текст без двоеточия, пробел, дефис, пробел, значение
+        def replace_tire(match):
+            # match.group(1) - текст до дефиса, match.group(2) - значение после дефиса
+            return f"- {match.group(1)}: {match.group(2)}"
+        
+        # Ищем строки вида "- Текст - Значение" 
+        # (не захватываем строки, где уже есть двоеточие)
+        line_pattern = re.compile(r'^-\s+([^:]+?)\s+-\s+(.+)$', re.MULTILINE)
+        new_body = line_pattern.sub(replace_tire, body)
+        
+        # Если ничего не изменилось, возвращаем исходный контент
+        if new_body == body:
+            return content
+        
+        # Заменяем старый блок новым
+        new_section = header + new_body
+        return content.replace(match.group(0), new_section)
+
+
 class DailyNoteUpdater:
     """
         Класс для применения стратегий обновления к ежедневным заметкам.
@@ -449,13 +523,11 @@ def main() -> None:
     notes_directory = r"C:\Knowledge_Base\Knowledge_Base\periodic\daily\2026"
 
     try:
-        # strategies = [
-        #     AddCityStrategy(),
-        # ]
+        strategies = [
+            DiaryFormatStrategy(),
+        ]
         
-        strategies = []
-        
-        updater = DailyNoteUpdater(notes_directory, strategies=strategies, backup=False)
+        updater = DailyNoteUpdater(notes_directory, strategies=strategies, backup=True)
         updater.run()
         
     except KeyboardInterrupt:
