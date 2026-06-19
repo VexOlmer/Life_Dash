@@ -2,10 +2,11 @@
 
 {% block content %}
 
-{# 1. ОПРЕДЕЛЯЕМ МАКРОС В САМОМ НАЧАЛЕ БЛОКА #}
+{# 1. Макрос вывода карточки дня #}
 {% macro day_card(day) %}
 <a href="{% if day.note %}/daily/{{ day.date }}{% else %}#{% endif %}" 
-   class="day-card {{ 'empty' if not day.note }}">
+   class="day-card {{ 'empty' if not day.note }} {{ 'ill' if day.note and day.note.illness_state }}">
+    
     <div class="day-card-header">
         <span class="name">{{ day.day_name }}</span>
         <span class="date">{{ day.display_date }}</span>
@@ -13,23 +14,50 @@
     
     {% if day.note %}
         <div class="day-card-body">
-            <!-- Ночной сон крупно -->
+            <!-- 1. Ночной сон -->
             <div style="font-size: 1.1rem; font-weight: 800; color: #1e293b;">
                 {{ day.note.night_sleep_pretty }}
             </div>
             <div style="font-size: 0.65rem; color: #94a3b8; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;">ночной сон</div>
             
-            <!-- Дневной сон чуть ниже, если есть -->
+            <!-- 2. Дневной сон (если был) -->
             {% if day.note.nap_mins > 0 %}
-            <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #f1f5f9;">
-                <span style="font-size: 0.9rem; font-weight: 800; color: #64748b;">+ {{ day.note.nap_pretty }}</span>
-                <span style="font-size: 0.6rem; color: #94a3b8; text-transform: uppercase; font-weight: 700;">дневной</span>
+            <div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid #f1f5f9;">
+                <span style="font-size: 0.85rem; font-weight: 800; color: #64748b;">+ {{ day.note.nap_pretty }}</span>
+                <span style="font-size: 0.55rem; color: #94a3b8; text-transform: uppercase; font-weight: 700;">дневной</span>
             </div>
             {% endif %}
 
+            <!-- 3. Блок флагов (виден только если есть хотя бы один флаг) -->
+            {% if day.note.morning_workout == "Да" or day.note.added_sugar == "Да" or day.note.has_content %}
+            <div style="margin-top: 12px; display: flex; gap: 8px; align-items: center;">
+                
+                {% if day.note.morning_workout == "Да" %}
+                    <span title="Разминка выполнена" style="font-size: 1.1rem;">🏃‍♂️</span>
+                {% endif %}
+
+                {% if day.note.added_sugar == "Да" %}
+                    <span title="Был лишний сахар" style="font-size: 1.1rem;">🍩</span>
+                {% endif %}
+
+                {% if day.note.has_content %}
+                    <span title="Есть записи в дневнике" style="font-size: 1.1rem;">📝</span>
+                {% endif %}
+                
+            </div>
+            {% endif %}
+
+            <!-- 4. Метрики здоровья -->
             <div style="margin-top: 12px; display: flex; flex-wrap: wrap; gap: 4px;">
-                {% if day.note.weight %}<div class="mini-tag">⚖️ {{ day.note.weight }}</div>{% endif %}
-                {% if day.note.temperature %}<div class="mini-tag" style="color: #ef4444;">🌡️ {{ day.note.temperature }}</div>{% endif %}
+                {% if day.note.weight %}
+                    <div class="mini-tag">⚖️ {{ day.note.weight }}</div>
+                {% endif %}
+                
+                {% if day.note.temperature %}
+                    <div class="mini-tag" style="color: #ef4444; border-color: #fee2e2; background: #fff5f5;">
+                        🌡️ {{ day.note.temperature }}
+                    </div>
+                {% endif %}
             </div>
         </div>
     {% else %}
@@ -72,49 +100,78 @@
         </div>
     </aside>
 
-    <style>
-        /* Скрываем стандартные стрелочки details */
-        summary::-webkit-details-marker { display: none; }
-        summary { list-style: none; outline: none; }
-        
-        .calendar-accordion details { margin-bottom: 5px; }
-        
-        /* Стилизация полосы прокрутки для календаря */
-        aside::-webkit-scrollbar { width: 6px; }
-        aside::-webkit-scrollbar-track { background: transparent; }
-        aside::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
-    </style>
-
     <!-- СПРАВА: ХАБ НЕДЕЛИ -->
     <section>
-        <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 30px;">
-            <div>
-                <div style="display: flex; align-items: center; gap: 15px;">
-                    <h1 style="font-size: 3rem; font-weight: 800; letter-spacing: -2px; margin: 0;">Дашборд</h1>
-                    
-                    <!-- КНОПКИ НАВИГАЦИИ -->
-                    <div style="display: flex; gap: 5px;">
-                        <a href="{{ prev_link }}" class="page-button" style="width: 35px; height: 35px;">‹</a>
-                        <a href="{{ next_link }}" class="page-button" style="width: 35px; height: 35px;">›</a>
-                    </div>
-                </div>
-                <p style="color: #94a3b8; font-weight: 600;">Неделя {{ target_week }}, {{ target_year }} + прошлая</p>
-            </div>
+        <div style="margin-bottom: 40px; display: flex; flex-direction: column; gap: 25px;">
             
-            {% if stats %}
-                <div style="display: flex; gap: 15px;">
-                    <div class="stat-pill" title="Средний ночной сон"><span>🛌</span> {{ stats.avg_night_sleep }}</div>
-                    {% if stats.avg_nap != "-" %}
-                        <div class="stat-pill" title="Средний дневной сон"><span>☀️</span> {{ stats.avg_nap }}</div>
-                    {% endif %}
-                    <div class="stat-pill" title="Всего работы"><span>💼</span> {{ stats.total_work }}</div>
-                    <div class="stat-pill" title="Средний вес"><span>⚖️</span> {{ stats.avg_weight }}</div>
+            <!-- 1 Ряд: Заголовок и Метрики здоровья -->
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <h1 style="font-size: 3.2rem; font-weight: 800; letter-spacing: -2px; margin: 0; line-height: 1;">Дневник</h1>
+                    <p style="color: #94a3b8; font-weight: 700; margin-top: 8px; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 1px;">
+                        Неделя {{ target_week }}, {{ target_year }}
+                    </p>
                 </div>
-            {% endif %}
+
+                {% if stats %}
+                    <div style="display: flex; gap: 12px;">
+                        <!-- Карточка: Ночной сон -->
+                        <div style="background: white; padding: 12px 20px; border-radius: 20px; border: 1px solid #f1f5f9; box-shadow: var(--shadow); text-align: center; min-width: 100px;">
+                            <div style="font-size: 0.6rem; font-weight: 800; color: #94a3b8; text-transform: uppercase; margin-bottom: 4px;">Ночной сон (ср)</div>
+                            <div style="font-size: 1.1rem; font-weight: 900; color: var(--primary);">{{ stats.avg_night_sleep }}</div>
+                        </div>
+
+                        <!-- Карточка: Дневной сон (ВОЗВРАЩЕНА) -->
+                        {% if stats.avg_nap != "-" %}
+                        <div style="background: white; padding: 12px 20px; border-radius: 20px; border: 1px solid #f1f5f9; box-shadow: var(--shadow); text-align: center; min-width: 100px;">
+                            <div style="font-size: 0.6rem; font-weight: 800; color: #94a3b8; text-transform: uppercase; margin-bottom: 4px;">Дневной сон (ср)</div>
+                            <div style="font-size: 1.1rem; font-weight: 900; color: #f59e0b;">{{ stats.avg_nap }}</div>
+                        </div>
+                        {% endif %}
+
+                        <!-- Карточка: Вес -->
+                        <div style="background: white; padding: 12px 20px; border-radius: 20px; border: 1px solid #f1f5f9; box-shadow: var(--shadow); text-align: center; min-width: 100px;">
+                            <div style="font-size: 0.6rem; font-weight: 800; color: #94a3b8; text-transform: uppercase; margin-bottom: 4px;">Вес (ср)</div>
+                            <div style="font-size: 1.1rem; font-weight: 900; color: #ef4444;">{{ stats.avg_weight }} кг</div>
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
+
+            <!-- 2 Ряд: Инструменты (Навигация, Аналитика, Синхронизация) -->
+            <div style="display: flex; justify-content: space-between; align-items: center; background: #fff; padding: 10px 10px 10px 20px; border-radius: 24px; border: 1px solid #f1f5f9; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02);">
+                
+                <!-- Левая группа: Навигация и Аналитика -->
+                <div style="display: flex; align-items: center; gap: 20px;">
+                    <div style="display: flex; gap: 4px; background: #f8fafc; padding: 4px; border-radius: 14px; border: 1px solid #f1f5f9;">
+                        <a href="{{ prev_link }}" class="nav-btn" title="Прошлая неделя">‹</a>
+                        <a href="{{ next_link }}" class="nav-btn" title="Следующая неделя">›</a>
+                    </div>
+                    
+                    <div style="width: 1px; height: 24px; background: #e2e8f0;"></div>
+
+                    <a href="/daily/charts?week={{ target_week }}&year={{ target_year }}" 
+                       class="btn-primary" style="padding: 10px 20px; font-size: 0.85rem; background: #1e293b;">
+                        <span>📈</span> Аналитика за месяц
+                    </a>
+                </div>
+
+                <!-- Правая группа: Синхронизация -->
+                <div style="display: flex; gap: 8px;">
+                    <button class="tool-btn" hx-post="/daily/sync" hx-target="#sync-report" title="Синхронизировать">
+                        <span>🔄</span>
+                    </button>
+                    <button class="tool-btn" hx-post="/daily/sync?force=true" hx-target="#sync-report" title="Принудительно обновить">
+                        <span>⚡</span>
+                    </button>
+                </div>
+            </div>
         </div>
 
-        <!-- СЕТКА НЕДЕЛЬ -->
-        <div class="week-grid">
+        <div id="sync-report"></div>
+
+        <!-- --- ВОТ ЭТОТ БЛОК БЫЛ УТЕРЯН: СЕТКА НЕДЕЛЬ --- -->
+        <div class="week-grid-container">
             <h2 class="week-title">Текущая неделя</h2>
             <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 15px;">
                 {% for day in current_week %}
@@ -129,10 +186,20 @@
                 {% endfor %}
             </div>
         </div>
+        <!-- -------------------------------------------- -->
+
     </section>
 </div>
 
 <style>
+    /* Скрываем стандартные стрелочки details */
+    summary::-webkit-details-marker { display: none; }
+    summary { list-style: none; outline: none; }
+    .calendar-accordion details { margin-bottom: 5px; }
+    aside::-webkit-scrollbar { width: 6px; }
+    aside::-webkit-scrollbar-track { background: transparent; }
+    aside::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+
     .day-link { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; background: #f1f5f9; border-radius: 6px; font-size: 0.75rem; text-decoration: none; color: #475569; font-weight: 800; }
     .day-link:hover { background: var(--primary); color: white; }
     .stat-pill { background: white; padding: 12px 20px; border-radius: 16px; border: 1px solid #eee; font-weight: 800; font-size: 0.9rem; display: flex; align-items: center; gap: 10px; box-shadow: var(--shadow); }

@@ -44,6 +44,9 @@ class DailyNote(SQLModel, table=True):
     illness_state: str | None = None
     temperature: float | None = None
     
+    # Мысли
+    has_content: bool = Field(default=False)
+    
     # Служебные поля
     file_path: str = Field(unique=True, index=True)
     last_modified: float

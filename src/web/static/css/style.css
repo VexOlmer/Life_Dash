@@ -339,3 +339,40 @@ body {
     color: #4338ca !important;
     border: 1px solid #c7d2fe;
 }
+
+/* Кнопки навигации */
+.nav-btn {
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+    color: #64748b;
+    font-weight: 800;
+    font-size: 1.2rem;
+    border-radius: 10px;
+    transition: 0.2s;
+}
+.nav-btn:hover { background: white; color: var(--primary); box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+
+/* Кнопки инструментов (синхрон) */
+.tool-btn {
+    background: #f8fafc;
+    border: 1px solid #f1f5f9;
+    width: 44px;
+    height: 44px;
+    border-radius: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    transition: 0.2s;
+}
+.tool-btn:hover {
+    background: white;
+    border-color: var(--primary);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.1);
+}

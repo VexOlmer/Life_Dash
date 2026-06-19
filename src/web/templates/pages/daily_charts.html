@@ -1,0 +1,258 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div style="max-width: 1400px; margin: 0 auto; padding: 0 20px;">
+    
+    <!-- ХЕДЕР -->
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2.5rem;">
+        <a href="/daily/" style="text-decoration: none; font-weight: 700; color: var(--text-muted); display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 1.2rem;">←</span> Назад к дашборду
+        </a>
+        <h1 style="font-size: 2.2rem; font-weight: 800; letter-spacing: -1.5px; margin: 0;">Аналитика за 30 дней</h1>
+        <div style="background: #1e293b; color: white; padding: 8px 20px; border-radius: 12px; font-weight: 700; font-size: 0.9rem;">
+            Период до {{ target_date }}
+        </div>
+    </div>
+
+    <!-- БЛОК ДИСЦИПЛИНЫ (Крупный сверху) -->
+    <div class="chart-container" style="margin-bottom: 30px; padding: 35px;">
+        <h3 class="chart-title"><span>🎯</span> Прогресс и дисциплина</h3>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1px 1fr; gap: 40px; align-items: center;">
+            
+            <!-- Секция: Разминка -->
+            <div style="display: flex; align-items: center; gap: 30px; justify-content: center;">
+                <div style="position: relative; width: 110px; height: 110px; flex-shrink: 0;">
+                    <canvas id="workoutCircle"></canvas>
+                    <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-weight: 900; font-size: 1.3rem;">
+                        {{ charts_data.discipline.workout_pct }}%
+                    </div>
+                </div>
+                <div>
+                    <div style="font-weight: 800; font-size: 1.1rem; color: #1e293b; margin-bottom: 10px;">Утренняя разминка</div>
+                        <div class="heatmap">
+                            {% for val in charts_data.discipline.workout %}
+                                {# Используем loop.index0 для получения даты из общего списка меток #}
+                                <div class="cube {{ 'active-workout' if val == 1 }}" 
+                                    title="{{ charts_data.labels[loop.index0] }}"></div>
+                            {% endfor %}
+                        </div>
+                    <div style="font-size: 0.7rem; color: #94a3b8; margin-top: 8px; font-weight: 700; text-transform: uppercase;">Трекер за 30 дней</div>
+                </div>
+            </div>
+
+            <div style="width: 1px; height: 100px; background: #f1f5f9;"></div>
+
+            <!-- Секция: Сахар -->
+            <div style="display: flex; align-items: center; gap: 30px; justify-content: center;">
+                <div style="position: relative; width: 110px; height: 110px; flex-shrink: 0;">
+                    <canvas id="sugarCircle"></canvas>
+                    <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-weight: 900; font-size: 1.3rem;">
+                        {{ charts_data.discipline.sugar_pct }}%
+                    </div>
+                </div>
+                <div>
+                    <div style="font-weight: 800; font-size: 1.1rem; color: #1e293b; margin-bottom: 10px;">Чистое питание (без сахара)</div>
+                        <div class="heatmap">
+                            {% for val in charts_data.discipline.sugar %}
+                                {# Аналогично используем индекс для вывода даты #}
+                                <div class="cube {{ 'active-sugar' if val == 1 }}" 
+                                    title="{{ charts_data.labels[loop.index0] }}"></div>
+                            {% endfor %}
+                        </div>
+                    <div style="font-size: 0.7rem; color: #94a3b8; margin-top: 8px; font-weight: 700; text-transform: uppercase;">Трекер за 30 дней</div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- СЕТКА ОСНОВНЫХ ГРАФИКОВ -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 25px; margin-bottom: 50px;">
+        
+        <!-- СОН -->
+        <div class="chart-container">
+            <h3 class="chart-title"><span>🛌</span> Ночной сон (часы)</h3>
+            <canvas id="nightSleepChart"></canvas>
+        </div>
+        <div class="chart-container">
+            <h3 class="chart-title"><span>☀️</span> Дневной сон (часы)</h3>
+            <canvas id="napSleepChart"></canvas>
+        </div>
+
+        <!-- ЛИЧНЫЕ ПОКАЗАТЕЛИ -->
+        <div class="chart-container">
+            <h3 class="chart-title"><span>⚖️</span> Динамика веса (кг)</h3>
+            <canvas id="weightChart"></canvas>
+        </div>
+        <div class="chart-container">
+            <h3 class="chart-title"><span>📊</span> ИМТ (BMI)</h3>
+            <canvas id="bmiChart"></canvas>
+        </div>
+        <div class="chart-container">
+            <h3 class="chart-title"><span>🔥</span> Процент жира %</h3>
+            <canvas id="fatChart"></canvas>
+        </div>
+        <div class="chart-container">
+            <h3 class="chart-title"><span>💪</span> Процент мышц %</h3>
+            <canvas id="muscleChart"></canvas>
+        </div>
+        <div class="chart-container" style="grid-column: span 1;">
+            <h3 class="chart-title"><span>⚠️</span> Висцеральный жир</h3>
+            <canvas id="visceralChart"></canvas>
+        </div>
+
+    </div>
+</div>
+
+<style>
+    .chart-container {
+        background: white;
+        padding: 25px;
+        border-radius: 24px;
+        border: 1px solid #eee;
+        box-shadow: 0 4px 6px -1px rgba(0,0,0,0.03);
+    }
+    .chart-title {
+        margin-bottom: 20px;
+        font-size: 0.75rem;
+        color: #94a3b8;
+        text-transform: uppercase;
+        letter-spacing: 1.5px;
+        font-weight: 800;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    .chart-title span {
+        font-size: 1.1rem;
+        background: #f8fafc;
+        padding: 6px;
+        border-radius: 10px;
+    }
+
+    /* Сетка трекера */
+    .heatmap {
+        display: grid;
+        grid-template-columns: repeat(10, 1fr);
+        gap: 6px;
+        width: fit-content;
+    }
+    .cube {
+        width: 14px;
+        height: 14px;
+        border-radius: 3px;
+        background: #f1f5f9;
+        transition: 0.3s;
+    }
+    .active-workout { background: #6366f1 !important; box-shadow: 0 0 8px rgba(99, 102, 241, 0.4); }
+    .active-sugar { background: #ec4899 !important; box-shadow: 0 0 8px rgba(236, 72, 153, 0.4); }
+</style>
+
+<script>
+const data = {{ charts_data | tojson }};
+
+// --- Настройки графиков ---
+
+const getSoftLineOptions = (padding = '40%') => ({
+    responsive: true,
+    plugins: { legend: { display: false } },
+    elements: {
+        line: { borderWidth: 2.5 },
+        point: { radius: 2, hoverRadius: 6, hitRadius: 10 }
+    },
+    scales: {
+        y: { 
+            grace: padding, 
+            grid: { color: '#f8fafc' },
+            ticks: { font: { size: 10, weight: '600' }, color: '#94a3b8' }
+        },
+        x: { 
+            grid: { display: false },
+            ticks: { 
+                maxTicksLimit: 8, 
+                font: { size: 10, weight: '600' }, 
+                color: '#94a3b8',
+                maxRotation: 0
+            }
+        }
+    }
+});
+
+const getFixedBarOptions = (maxVal) => ({
+    responsive: true,
+    plugins: { legend: { display: false } },
+    scales: {
+        y: { beginAtZero: true, max: maxVal, grid: { color: '#f8fafc' }, ticks: { font: { weight: '600' }, color: '#94a3b8' } },
+        x: { grid: { display: false }, ticks: { maxTicksLimit: 10, font: { weight: '600' }, color: '#94a3b8' } }
+    }
+});
+
+// --- Функции инициализации ---
+
+function createLine(id, label, chartData, color, padding) {
+    return new Chart(document.getElementById(id), {
+        type: 'line',
+        data: {
+            labels: data.labels,
+            datasets: [{
+                data: chartData,
+                borderColor: color,
+                backgroundColor: color + '11',
+                fill: true,
+                tension: 0.4
+            }]
+        },
+        options: getSoftLineOptions(padding)
+    });
+}
+
+function createCircle(id, pct, color) {
+    return new Chart(document.getElementById(id), {
+        type: 'doughnut',
+        data: {
+            datasets: [{
+                data: [pct, 100 - pct],
+                backgroundColor: [color, '#f1f5f9'],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            cutout: '82%',
+            plugins: { legend: { display: false }, tooltip: { enabled: false } }
+        }
+    });
+}
+
+// 1. Дисциплина
+createCircle('workoutCircle', data.discipline.workout_pct, '#6366f1');
+createCircle('sugarCircle', data.discipline.sugar_pct, '#ec4899');
+
+// 2. Сон
+new Chart(document.getElementById('nightSleepChart'), {
+    type: 'bar',
+    data: {
+        labels: data.labels,
+        datasets: [{ data: data.sleep.night, backgroundColor: '#6366f1', borderRadius: 4 }]
+    },
+    options: getFixedBarOptions(12)
+});
+
+new Chart(document.getElementById('napSleepChart'), {
+    type: 'bar',
+    data: {
+        labels: data.labels,
+        datasets: [{ data: data.sleep.nap, backgroundColor: '#fbbf24', borderRadius: 4 }]
+    },
+    options: getFixedBarOptions(4)
+});
+
+// 3. Метрики (с мягким масштабом)
+createLine('weightChart', 'Вес', data.metrics.weight, '#ef4444', '50%');
+createLine('bmiChart', 'ИМТ', data.metrics.bmi, '#3b82f6', '50%');
+createLine('fatChart', 'Жир', data.metrics.fat, '#f59e0b', '60%');
+createLine('muscleChart', 'Мышцы', data.metrics.muscle, '#10b981', '60%');
+createLine('visceralChart', 'Индекс', data.metrics.visceral, '#8b5cf6', '100%');
+
+</script>
+{% endblock %}

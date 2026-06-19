@@ -137,12 +137,26 @@ class DailyTransformer:
             }
 
         # 5. Болезнь
+        ill_state, temp = None, None
         if re.search(r"(?m)^###.*Болезнь", content):
             ill_state = re.search(r"-.*Состояние:\s*(.+)$", content, re.M)
             temp = re.search(r"-.*Температура:\s*([\d.]+)\s*$", content, re.M)
             
             if not (ill_state and temp):
                 raise ValidationError(f"[{file_path.name}] Оба показетеля блока болезни должны быть заполнены.")
+        
+        # 6. Мысли
+        has_content = False
+        content_match = re.search(r"##\s*.*Мысли.*\n([\s\S]+?)(?=\n##|---|$)", content)
+
+        if content_match:
+            text_inside = content_match.group(1).strip()
+            
+            # Дополнительная проверка: не является ли текст просто пустым списком "- "
+            clean_text = text_inside.replace("-", "").strip()
+            
+            if len(clean_text) > 5:
+                has_content = True
 
         note = DailyNote(
             date=db_date_str,
@@ -163,6 +177,8 @@ class DailyTransformer:
             
             illness_state=ill_state.group(1).strip() if ill_state else None,
             temperature=float(temp.group(1)) if temp else None,
+            
+            has_content=has_content,
             
             file_path=str(file_path.relative_to(vault_path)),
             last_modified=mtime

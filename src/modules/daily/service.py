@@ -1,8 +1,12 @@
 """Сервис для извлечения контента из ежедневных заметок."""
 
+import re
 from datetime import date, datetime, timedelta
 
 from sqlmodel import Session, select
+
+from src.core.config import settings
+from src.core.logger import logger
 
 from .models import DailyNote
 
@@ -105,3 +109,86 @@ class DailyService:
                 structure[y][m] = []
             structure[y][m].append(d)
         return structure
+
+    @staticmethod
+    def prepare_charts_json(weeks_data: list) -> dict:
+        """Подготавливает чистые списки данных для отрисовки в Chart.js."""
+        labels = [d["display_date"] for d in weeks_data]
+        
+        # Показатели Сна
+        sleep_night = []
+        sleep_nap = []
+        
+        # Дневник самоконтроля (Да = 1, Нет = 0, Нет данных = null)
+        workout = []
+        sugar = []
+        
+        # Показатели Веса
+        weight = []
+        bmi = []
+        fat = []
+        muscle = []
+        visceral = []
+
+        for d in weeks_data:
+            note = d["note"]
+            if note:
+                sleep_night.append(round(note.night_sleep_minutes / 60, 1))
+                sleep_nap.append(round(note.nap_mins / 60, 1))
+                workout.append(1 if note.morning_workout == "Да" else 0)
+                sugar.append(1 if note.added_sugar == "Да" else 0)
+                weight.append(note.weight)
+                bmi.append(note.bmi)
+                fat.append(note.fat_pct)
+                muscle.append(note.muscle_pct)
+                visceral.append(note.visceral_fat)
+            else:
+                # Если дня нет в БД, вставляем None для разрыва в графике
+                for lst in [sleep_night, sleep_nap, workout, sugar, weight, bmi, fat, muscle, visceral]:
+                    lst.append(None)
+        
+        workout_list = [1 if d["note"] and d["note"].morning_workout == "Да" else 0 for d in weeks_data]
+        # Сахар инвертируем: 1 если сахара НЕ БЫЛО (успех)
+        sugar_list = [1 if d["note"] and d["note"].added_sugar == "Нет" else 0 for d in weeks_data]
+
+        return {
+            "labels": labels,
+            "sleep": {"night": sleep_night, "nap": sleep_nap},
+            "control": {"workout": workout, "sugar": sugar},
+            "metrics": {
+                "weight": weight, "bmi": bmi, "fat": fat, 
+                "muscle": muscle, "visceral": visceral
+            },
+            "discipline": {
+                "workout": workout_list,
+                "sugar": sugar_list,
+                "workout_pct": int(sum(workout_list) / len(weeks_data) * 100),
+                "sugar_pct": int(sum(sugar_list) / len(weeks_data) * 100)
+            }
+        }
+        
+    @staticmethod
+    def get_daily_content(relative_path: str) -> dict[str, str]:
+        """Парсит файл дня и извлекает мысли."""
+
+        full_path = settings.OBSIDIAN_VAULT_PATH / relative_path
+        if not full_path.exists():
+            return {}
+
+        content = full_path.read_text(encoding="utf-8")
+
+        def extract_section(keyword: str) -> str:
+            pattern = rf"(?m)^##\s+[^#\n]*?{re.escape(keyword)}[^\n]*\n(.*?)(?=\n##(?![#])|\n---|\Z)"
+            match = re.search(pattern, content, flags=re.DOTALL)
+            
+            if match:
+                text = match.group(1).strip()
+                logger.debug(f"Секция '{keyword}' успешно захвачена. Символов: {len(text)}")
+                return text
+            
+            logger.warning(f"Секция '{keyword}' не найдена в {relative_path}")
+            return ""
+
+        return {
+            "mind": extract_section("Мысли"),
+        }

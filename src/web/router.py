@@ -65,3 +65,10 @@ async def index(request: Request, session: SessionDep) -> HTMLResponse:
     return templates.TemplateResponse(
         "pages/index.html", {"request": request, "stats": new_stats}
     )
+    
+@router.get("/time/", response_class=HTMLResponse)
+@router.get("/money/", response_class=HTMLResponse)
+@router.get("/sport/", response_class=HTMLResponse)
+async def construction(request: Request) -> HTMLResponse:
+    """Заглушки не разработанных частей ежедневной заметки."""
+    return templates.TemplateResponse("pages/index.html", {"request": request, "stats": stats_cache.get() or {}})
