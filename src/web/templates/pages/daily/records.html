@@ -1,0 +1,135 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div style="max-width: 1000px; margin: 0 auto; padding: 0 20px;">
+    
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 3rem;">
+        <a href="/daily/" style="text-decoration: none; font-weight: 700; color: var(--text-muted);">← Назад к хабу</a>
+        <h1 style="font-size: 2.5rem; font-weight: 800; letter-spacing: -1.5px; margin: 0;">Зал славы</h1>
+        <div style="font-size: 2rem;">🏆</div>
+    </div>
+
+    <!-- НОВЫЙ БЛОК: СРЕДНЕЕ ВРЕМЯ РЕЖИМА -->
+    <div style="background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); padding: 30px; border-radius: 32px; border: 1px solid #e2e8f0; margin-bottom: 40px; display: flex; align-items: center; justify-content: space-around;">
+        <div style="text-align: center;">
+            <div style="font-size: 0.7rem; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">Среднее время засыпания</div>
+            <div style="font-size: 2.2rem; font-weight: 900; color: #1e293b;">🌙 {{ records.sleep.avg_bedtime }}</div>
+        </div>
+        <div style="width: 1px; height: 50px; background: #cbd5e1;"></div>
+        <div style="text-align: center;">
+            <div style="font-size: 0.7rem; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">Среднее время подъема</div>
+            <div style="font-size: 2.2rem; font-weight: 900; color: #1e293b;">☀️ {{ records.sleep.avg_wakeuptime }}</div>
+        </div>
+    </div>
+
+    <!-- БЛОК 1: РЕКОРДЫ СНА -->
+    <h3 style="text-transform: uppercase; font-size: 0.8rem; letter-spacing: 2px; color: #94a3b8; margin-bottom: 20px; font-weight: 800;">Статистика сна</h3>
+    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 25px; margin-bottom: 50px;">
+        
+    {% macro record_card(title, data, icon, color) %}
+        <div style="background: white; padding: 30px; border-radius: 28px; border: 1px solid #f1f5f9; box-shadow: var(--shadow); position: relative; overflow: hidden;">
+            <div style="font-size: 0.7rem; font-weight: 800; color: #94a3b8; text-transform: uppercase; margin-bottom: 10px;">{{ title }}</div>
+            <div style="font-size: 2rem; font-weight: 900; color: {{ color }}; margin-bottom: 15px;">{{ data.val }}</div>
+            
+            {% if data.iso_date %}
+            <a href="/daily/{{ data.iso_date }}" 
+               style="display: inline-flex; align-items: center; gap: 6px; text-decoration: none; background: #f8fafc; padding: 6px 12px; border-radius: 10px; font-size: 0.8rem; font-weight: 700; color: #475569; transition: 0.2s;" 
+               onmouseover="this.style.background='#e2e8f0'" onmouseout="this.style.background='#f8fafc'">
+                <!-- Используем display_date для текста -->
+                <span>📅</span> {{ data.display_date }} <span style="opacity: 0.3;">→</span>
+            </a>
+            {% endif %}
+
+            <div style="position: absolute; right: -10px; bottom: -10px; font-size: 4rem; opacity: 0.05; transform: rotate(-15deg);">{{ icon }}</div>
+        </div>
+        {% endmacro %}
+
+        {{ record_card("Макс. ночной сон", records.sleep.max, "🌙", "#6366f1") }}
+        {{ record_card("Мин. ночной сон", records.sleep.min, "⚡", "#ef4444") }}
+        {{ record_card("Макс. дневной сон", records.sleep.nap, "☀️", "#f59e0b") }}
+    </div>
+
+    <!-- БЛОК 2: РЕКОРДЫ ВЕСА -->
+    <h3 style="text-transform: uppercase; font-size: 0.8rem; letter-spacing: 2px; color: #94a3b8; margin-bottom: 20px; font-weight: 800;">Контроль веса</h3>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 25px; margin-bottom: 50px;">
+        
+        <!-- Максимальный вес -->
+        {{ record_card("Максимальный вес", records.weight_records.max, "⚖️", "#1e293b") }}
+        
+        <!-- Минимальный вес -->
+        {{ record_card("Минимальный вес", records.weight_records.min, "📉", "#10b981") }}
+        
+    </div>
+
+    <!-- БЛОК 3: СЕРИИ ДИСЦИПЛИНЫ (обновленный) -->
+    <h3 style="text-transform: uppercase; font-size: 0.8rem; letter-spacing: 2px; color: #94a3b8; margin-bottom: 20px; font-weight: 800;">Анализ серий и стабильности</h3>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 25px; margin-bottom: 50px;">
+        
+        {% macro streak_card(title, icon, stats, color_pos, color_neg, bg_pos, bg_neg) %}
+        <div style="background: white; border-radius: 28px; border: 1px solid #f1f5f9; box-shadow: var(--shadow); padding: 30px;">
+            <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 25px;">
+                <div style="font-size: 1.5rem; background: #f8fafc; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; border-radius: 14px;">{{ icon }}</div>
+                <h4 style="margin: 0; font-size: 1.2rem; font-weight: 800;">{{ title }}</h4>
+            </div>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                <!-- Позитив -->
+                <div style="background: {{ bg_pos }}; padding: 20px; border-radius: 20px;">
+                    <div style="font-size: 0.6rem; font-weight: 800; color: {{ color_pos }}; text-transform: uppercase;">Положительные</div>
+                    <div style="margin: 10px 0;">
+                        <span style="font-size: 1.8rem; font-weight: 900; color: {{ color_pos }};">{{ stats.max_pos }}</span>
+                        <span style="font-size: 0.8rem; color: {{ color_pos }}; font-weight: 700;">дн.</span>
+                    </div>
+                    <!-- Вывод диапазона дат -->
+                    <div style="font-size: 0.7rem; color: {{ color_pos }}; opacity: 0.6; margin-bottom: 5px;">{{ stats.range_max_pos }}</div>
+                    <div style="font-size: 0.85rem; font-weight: 700; color: {{ color_pos }};">Средняя: {{ stats.avg_pos }} дн.</div>
+                </div>
+
+                <!-- Негатив -->
+                <div style="background: {{ bg_neg }}; padding: 20px; border-radius: 20px;">
+                    <div style="font-size: 0.6rem; font-weight: 800; color: {{ color_neg }}; text-transform: uppercase;">Пропуски</div>
+                    <div style="margin: 10px 0;">
+                        <span style="font-size: 1.8rem; font-weight: 900; color: {{ color_neg }};">{{ stats.max_neg }}</span>
+                        <span style="font-size: 0.8rem; color: {{ color_neg }}; font-weight: 700;">дн.</span>
+                    </div>
+                    <!-- Вывод диапазона дат -->
+                    <div style="font-size: 0.7rem; color: {{ color_neg }}; opacity: 0.6; margin-bottom: 5px;">{{ stats.range_max_neg }}</div>
+                    <div style="font-size: 0.85rem; font-weight: 700; color: {{ color_neg }};">Средняя: {{ stats.avg_neg }} дн.</div>
+                </div>
+            </div>
+        </div>
+        {% endmacro %}
+
+        {{ streak_card("Утренняя разминка", "🏃‍♂️", records.streaks.workout, "#16a34a", "#dc2626", "#f0fdf4", "#fef2f2") }}
+        {{ streak_card("Без сахара", "🍏", records.streaks.sugar, "#0891b2", "#ea580c", "#ecfeff", "#fff7ed") }}
+
+    </div>
+
+    <h3 style="text-transform: uppercase; font-size: 0.8rem; letter-spacing: 2px; color: #94a3b8; margin-top: 40px; margin-bottom: 20px; font-weight: 800;">Рекорды активности (Топ-5)</h3>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 25px; margin-bottom: 50px;">
+        
+        <!-- Шаги -->
+        <div style="background: white; padding: 25px; border-radius: 28px; border: 1px solid #f1f5f9; box-shadow: var(--shadow);">
+            <h4 style="margin-bottom: 15px;">👣 Шаги</h4>
+            {% for rec in records.activity.steps %}
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #f8fafc;">
+                <span style="font-weight: 800; color: #6366f1;">{{ rec.val }}</span>
+                <a href="/daily/{{ rec.iso_date }}" style="font-size: 0.8rem; color: #94a3b8; text-decoration: none;">{{ rec.display_date }} →</a>
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- Калории -->
+        <div style="background: white; padding: 25px; border-radius: 28px; border: 1px solid #f1f5f9; box-shadow: var(--shadow);">
+            <h4 style="margin-bottom: 15px;">🔥 Калории</h4>
+            {% for rec in records.activity.calories %}
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #f8fafc;">
+                <span style="font-weight: 800; color: #f97316;">{{ rec.val }}</span>
+                <a href="/daily/{{ rec.iso_date }}" style="font-size: 0.8rem; color: #94a3b8; text-decoration: none;">{{ rec.display_date }} →</a>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    
+</div>
+{% endblock %}

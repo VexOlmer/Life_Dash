@@ -1,4 +1,4 @@
-"""Модуль обработки заметок о книгах."""
+"""Модуль обработки заметок об книгах."""
 
 from pathlib import Path
 
@@ -22,12 +22,12 @@ class BookTransformer:
             Превращает Markdown файл в объект Book с расчетом суммы рейтинга.
 
             Args:
-                file_path: Полный путь к Mardown файлу
-                vault_path: Полный путь к базе знаний Obsidian
-                mtime: Время последнего обновления
+                file_path: Полный путь к Mardown файлу.
+                vault_path: Полный путь к базе знаний Obsidian.
+                mtime: Время последнего обновления.
             
             Returns:
-                Book: Готовая модель класса Book
+                Book: Готовая модель класса Book.
         """
         
         logger.debug(f"Начало обработки: {file_path.name}")

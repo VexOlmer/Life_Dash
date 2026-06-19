@@ -1,24 +1,30 @@
-"""Настроечный файл миграций БД при обновлении полей."""
-
 from logging.config import fileConfig
 
-from alembic import context
-from sqlalchemy import engine_from_config, pool
+from sqlalchemy import engine_from_config
+from sqlalchemy import pool
 from sqlmodel import SQLModel
+
+from alembic import context
 
 from src.core.config import settings
 from src.modules.books.models import Book
+from src.modules.games.models import Game
+from src.modules.daily.models import TimeLog
+from src.modules.daily.models import DailyNote
+
+# this is the Alembic Config object, which provides
+# access to the values within the .ini file in use.
+config = context.config
 
 # Interpret the config file for Python logging.
-config = context.config
+# This line sets up loggers basically.
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# --- УКАЗЫВАЕМ МЕТАДАННЫЕ SQLMODEL ---
 target_metadata = SQLModel.metadata
 
-# --- ДИНАМИЧЕСКИ ПОДТЯГИВАЕМ URL ИЗ .ENV ---
 config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+
 
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode.

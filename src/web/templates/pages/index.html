@@ -1,61 +1,185 @@
 {% extends "layout.html" %}
 
 {% block content %}
-<div style="display: flex; align-items: center; gap: 2rem; margin-bottom: 4rem;">
-    <!-- Тот самый "смайлик" или иконка, но в более строгом стиле -->
-    <div style="font-size: 4rem; background: white; width: 100px; height: 100px; display: flex; align-items: center; justify-content: center; border-radius: 24px; box-shadow: var(--shadow);">
-        🪐
-    </div>
-    <div>
-        <h1 style="font-size: 3.5rem; font-weight: 800; margin: 0; letter-spacing: -2px;">Life Dash</h1>
-        <div style="display: flex; gap: 10px; margin-top: 5px;">
-            <span class="tag" style="background: #f1f5f9; color: #475569;">Personal Dashboard</span>
+<!-- Приветственный блок -->
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4rem;">
+    <div style="display: flex; align-items: center; gap: 2rem;">
+        <div style="font-size: 3.5rem; background: white; width: 90px; height: 90px; display: flex; align-items: center; justify-content: center; border-radius: 28px; box-shadow: var(--shadow); border: 1px solid #f1f5f9;">
+            🪐
+        </div>
+        <div>
+            <h1 style="font-size: 3.2rem; font-weight: 800; margin: 0; letter-spacing: -2px; line-height: 1;">Life Dash</h1>
+            <p style="margin-top: 8px; color: var(--text-muted); font-weight: 600; display: flex; align-items: center; gap: 8px;">
+                <span style="width: 8px; height: 8px; background: #10b981; border-radius: 50%; display: inline-block;"></span>
+                Система синхронизирована с Obsidian
+            </p>
         </div>
     </div>
-</div>
-
-<div class="stats-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 2rem;">
     
-    <!-- Модуль Книги: Расширенная статистика -->
-    <div class="stat-card" style="background: white; padding: 2rem; border-radius: 24px; border: 1px solid #e2e8f0; box-shadow: var(--shadow);">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
-            <h2 style="margin: 0; font-size: 1.5rem; font-weight: 700;">📚 Книги</h2>
-            <a href="/books/" class="btn-primary" style="padding: 6px 14px; font-size: 0.8rem;">Открыть</a>
-        </div>
-
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
-            <div>
-                <span style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">Всего</span>
-                <p style="font-size: 2rem; font-weight: 800; margin: 0;">{{ stats.books.total }}</p>
-            </div>
-            <div>
-                <span style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">Средний балл</span>
-                <p style="font-size: 2rem; font-weight: 800; margin: 0; color: #f59e0b;">{{ stats.books.avg }}</p>
-            </div>
-            <div style="grid-column: span 2; background: #f8fafc; padding: 1rem; border-radius: 12px; display: flex; justify-content: space-between; align-items: center;">
-                <div>
-                    <span style="font-size: 0.8rem; color: var(--text-muted);">Прочитано страниц:</span>
-                    <strong style="margin-left: 5px;">{{ stats.books.pages }}</strong>
-                </div>
-                <div style="text-align: right;">
-                    <span style="font-size: 0.8rem; color: var(--text-muted);">В процессе:</span>
-                    <strong style="margin-left: 5px; color: var(--primary);">{{ stats.books.reading }}</strong>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Заглушки для будущих модулей (чтобы сетка не была пустой) -->
-    <div style="background: rgba(255,255,255,0.4); border: 2px dashed #e2e8f0; padding: 2rem; border-radius: 24px; display: flex; flex-direction: column; justify-content: center; align-items: center; color: #cbd5e1;">
-        <span style="font-size: 2rem; margin-bottom: 1rem;">🎮</span>
-        <span style="font-weight: 600; font-size: 1.1rem;">Игры</span>
-        <span style="font-size: 0.8rem;">Модуль в разработке</span>
-    </div>
-
-    <div style="background: rgba(255,255,255,0.4); border: 2px dashed #e2e8f0; padding: 2rem; border-radius: 24px; display: flex; flex-direction: column; justify-content: center; align-items: center; color: #cbd5e1;">
-        <span style="font-size: 2rem; margin-bottom: 1rem;">🎬</span>
-        <span style="font-weight: 600; font-size: 1.1rem;">Кино</span>
-        <span style="font-size: 0.8rem;">Модуль в разработке</span>
+    <!-- Быстрые действия -->
+    <div style="display: flex; gap: 12px;">
+        <a href="/daily/" class="btn-primary" style="background: #1e293b; padding: 12px 24px;">Перейти в Дневник</a>
     </div>
 </div>
+
+<!-- СЕТКА МОДУЛЕЙ -->
+<div class="stats-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 25px;">
+    
+    <!-- КНИГИ -->
+    <div class="module-card">
+        <div class="module-header">
+            <div class="module-icon" style="background: #fff7ed; color: #f59e0b;">📚</div>
+            <a href="/books/" class="module-link">Библиотека →</a>
+        </div>
+        <div class="module-main">
+            <div class="big-num">{{ stats.books.total }}</div>
+            <div class="module-label">Книг в базе</div>
+        </div>
+        <div class="module-footer">
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+                <span>📄 Страниц: <b>{{ "{:,}".format(stats.books.pages).replace(",", " ") }}</b></span>
+                <span>📖 Читаю: <b>{{ stats.books.reading }}</b></span>
+            </div>
+            <div style="text-align: right;">
+                <span style="display: block; font-size: 0.65rem; text-transform: uppercase; font-weight: 800; color: #94a3b8; margin-bottom: 2px;">Средний балл</span>
+                <span style="font-size: 1.1rem; font-weight: 900; color: #f59e0b;">{{ stats.books.avg }}</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- ИГРЫ -->
+    <div class="module-card">
+        <div class="module-header">
+            <div class="module-icon" style="background: #f5f3ff; color: #6366f1;">🎮</div>
+            <a href="/games/" class="module-link">Игротека →</a>
+        </div>
+        <div class="module-main">
+            <div class="big-num">{{ stats.games.total }}</div>
+            <div class="module-label">Игр в базе</div>
+        </div>
+        <div class="module-footer">
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+                <span>⏱️ Часов: <b>{{ stats.games.hours|int }}</b></span>
+                <span>🏆 Perfect: <b>{{ stats.games.perfect }}</b></span>
+            </div>
+            <div style="text-align: right;">
+                <span style="display: block; font-size: 0.65rem; text-transform: uppercase; font-weight: 800; color: #94a3b8; margin-bottom: 2px;">Средний балл</span>
+                <span style="font-size: 1.1rem; font-weight: 900; color: #6366f1;">{{ stats.games.avg }}</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- ВРЕМЯ (Placeholder) -->
+    <div class="module-card">
+        <div class="module-header">
+            <div class="module-icon" style="background: #ecfdf5; color: #10b981;">⌛</div>
+            <a href="/time/" class="module-link">Время →</a>
+        </div>
+        <div class="module-main">
+            <div class="big-num" style="opacity: 0.2;">-- : --</div>
+            <div class="module-label">Распределение времени</div>
+        </div>
+        <div class="module-footer">
+            <span style="font-size: 0.75rem; font-weight: 700; color: #10b981; text-transform: uppercase;">Модуль в разработке</span>
+        </div>
+    </div>
+
+    <!-- ДЕНЬГИ (Placeholder) -->
+    <div class="module-card">
+        <div class="module-header">
+            <div class="module-icon" style="background: #fef2f2; color: #ef4444;">💸</div>
+            <a href="/money/" class="module-link">Финансы →</a>
+        </div>
+        <div class="module-main">
+            <div class="big-num" style="opacity: 0.2;">0.00 ₽</div>
+            <div class="module-label">Баланс и расходы</div>
+        </div>
+        <div class="module-footer">
+            <span style="font-size: 0.75rem; font-weight: 700; color: #10b981; text-transform: uppercase;">Модуль в разработке</span>
+        </div>
+    </div>
+
+    <!-- СПОРТ (Placeholder) -->
+    <div class="module-card">
+        <div class="module-header">
+            <div class="module-icon" style="background: #eff6ff; color: #3b82f6;">🏋️</div>
+            <a href="/sport/" class="module-link">Тренировки →</a>
+        </div>
+        <div class="module-main">
+            <div class="big-num" style="opacity: 0.2;">0</div>
+            <div class="module-label">Тренировок в месяц</div>
+        </div>
+        <div class="module-footer">
+            <span style="font-size: 0.75rem; font-weight: 700; color: #10b981; text-transform: uppercase;">Модуль в разработке</span>
+        </div>
+    </div>
+
+</div>
+
+<style>
+    .module-card {
+        background: white;
+        padding: 24px;
+        border-radius: 32px;
+        border: 1px solid #f1f5f9;
+        box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02);
+        transition: all 0.3s ease;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        min-height: 240px;
+    }
+    .module-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 20px 25px -5px rgba(0,0,0,0.05);
+        border-color: var(--border);
+    }
+    .module-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+    }
+    .module-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+    }
+    .module-link {
+        font-size: 0.85rem;
+        font-weight: 700;
+        text-decoration: none;
+        color: var(--text-muted);
+        transition: 0.2s;
+    }
+    .module-link:hover { color: var(--primary); }
+    
+    .big-num {
+        font-size: 2.8rem;
+        font-weight: 900;
+        letter-spacing: -2px;
+        line-height: 1;
+        color: var(--text-dark);
+    }
+    .module-label {
+        font-size: 0.85rem;
+        font-weight: 700;
+        color: var(--text-muted);
+        margin-top: 5px;
+    }
+    .module-footer {
+        margin-top: 25px;
+        padding-top: 15px;
+        border-top: 1px solid #f8fafc;
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.8rem;
+        color: var(--text-muted);
+    }
+    .module-footer b { color: var(--text-dark); }
+</style>
 {% endblock %}

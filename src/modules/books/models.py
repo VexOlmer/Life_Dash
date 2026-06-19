@@ -337,6 +337,7 @@ class Book(SQLModel, table=True):
         sessions = []
         # Разделитель сессий, склеенный трансформером
         raw_entries = self.read_log.split(" || ")
+        total_entries = len(raw_entries)
 
         for i, entry in enumerate(raw_entries, 1):
             try:
@@ -346,7 +347,7 @@ class Book(SQLModel, table=True):
                     logger.warning(f"Пропуск сессии {i} в {self.title}: недостаточно полей (нужно 4, найдено {len(parts)})")
                     continue
 
-                # 1. Даты (обязательно)
+                # 1. Даты чтения (обязательно)
                 date_part = parts[0]
                 dates = date_part.split("-")
                 start_str = dates[0].strip()
@@ -373,6 +374,25 @@ class Book(SQLModel, table=True):
                     vol_val = int(raw_vol) if str(raw_vol).isdigit() else 0
                     disp_vol = f"{vol_val} стр"
                     s_type = "book"
+                    
+                # --- Определение статуса сессии ---
+                is_last = (i == total_entries)
+                has_no_finish = (finish_str in ["...", ""])
+                session_status = None # По умолчанию завершенная сессия
+                
+                if has_no_finish:
+                    if not is_last:
+                        # Если дата не закрыта и это НЕ последняя сессия -> брошена
+                        session_status = "dropped"
+                    else:
+                        # Если это последняя сессия, смотрим на общий статус книги
+                        if self.status == "dropped":
+                            session_status = "dropped"
+                        else:
+                            session_status = "reading"
+                elif is_last and self.status == "dropped":
+                    # Крайний случай: дата завершения стоит, но книгу в итоге дропнули на этом моменте
+                    session_status = "dropped"
 
                 session = {
                     "number": i,
@@ -384,6 +404,7 @@ class Book(SQLModel, table=True):
                     "format": s_format,
                     "language": s_lang,
                     "type": s_type,
+                    "session_status": session_status, # "dropped", "reading" или None
                     "days": None,
                     "pace": None
                 }

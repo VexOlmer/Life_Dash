@@ -77,54 +77,70 @@
 
     <!-- ПАНЕЛЬ ФИЛЬТРОВ -->
     <form method="get" action="/books/" 
-          hx-get="/books/" 
-          hx-target="#library-container" 
-          hx-select="#library-container"
-          hx-trigger="change from:select"
-          hx-push-url="true"
-          style="display: flex; align-items: center; gap: 12px; background: white; padding: 12px 20px; border-radius: 20px; margin-bottom: 2rem; border: 1px solid var(--border); box-shadow: var(--shadow);">
+        hx-get="/books/" hx-target="#library-container" hx-select="#library-container"
+        hx-trigger="change from:select" hx-push-url="true"
+        class="filter-panel">
         
-        <div style="font-size: 1.2rem; margin-right: 5px;">🔍</div>
+        <div style="font-size: 1.8rem; padding-bottom: 5px; margin-right: 5px;">📚</div>
 
-        <!-- Статус -->
-        <select name="status" class="filter-select">
-            <option value="">Все статусы</option>
-            {% for s in all_statuses %}
-            <option value="{{ s.id }}" {{ 'selected' if current_status == s.id }}>{{ s.label }}</option>
-            {% endfor %}
-        </select>
+        <div class="filter-group">
+            <label>Статус</label>
+            <div class="filter-control-wrapper">
+                <span class="filter-icon">📖</span>
+                <select name="status" class="filter-select {{ 'is-active' if current_status }}">
+                    <option value="">Все статусы</option>
+                    {% for s in all_statuses %}
+                    <option value="{{ s.id }}" {{ 'selected' if current_status == s.id }}>{{ s.label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
 
-        <!-- Жанр -->
-        <select name="genre" class="filter-select">
-            <option value="">Все жанры</option>
-            {% for g in all_genres %}
-            <option value="{{ g.id }}" {{ 'selected' if current_genre == g.id }}>{{ g.label }}</option>
-            {% endfor %}
-        </select>
+        <div class="filter-group">
+            <label>Жанр</label>
+            <div class="filter-control-wrapper">
+                <span class="filter-icon">🏷️</span>
+                <select name="genre" class="filter-select {{ 'is-active' if current_genre }}">
+                    <option value="">Все жанры</option>
+                    {% for g in all_genres %}
+                    <option value="{{ g.id }}" {{ 'selected' if current_genre == g.id }}>{{ g.label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
 
-        <!-- Страна -->
-        <select name="country" class="filter-select">
-            <option value="">Все страны</option>
-            {% for c in all_countries %}
-            <option value="{{ c }}" {{ 'selected' if current_country == c }}>{{ c }}</option>
-            {% endfor %}
-        </select>
+        <div class="filter-group">
+            <label>Страна</label>
+            <div class="filter-control-wrapper">
+                <span class="filter-icon">🌍</span>
+                <select name="country" class="filter-select {{ 'is-active' if current_country }}">
+                    <option value="">Все страны</option>
+                    {% for c in all_countries %}
+                    <option value="{{ c }}" {{ 'selected' if current_country == c }}>{{ c }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
 
-        <select name="book_format" class="filter-select">
-            <option value="">Все форматы</option>
-            {% for f in all_formats %}
-            <option value="{{ f.id }}" {{ 'selected' if current_format == f.id }}>
-                {{ f.label }}
-            </option>
-            {% endfor %}
-        </select>
+        <div class="filter-group">
+            <label>Формат</label>
+            <div class="filter-control-wrapper">
+                <span class="filter-icon">💿</span>
+                <select name="book_format" class="filter-select {{ 'is-active' if current_format }}">
+                    <option value="">Все форматы</option>
+                    {% for f in all_formats %}
+                    <option value="{{ f.id }}" {{ 'selected' if current_format == f.id }}>{{ f.label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
 
-        <!-- Кнопка сброса (уменьшенная) -->
-        <a href="/books/" class="btn-reset" title="Сбросить все фильтры">
-            <span style="font-size: 1.2rem; font-weight: bold;">&times;</span>
+        <div class="filter-separator"></div>
+
+        <a href="/books/" class="btn-reset" title="Сбросить все" style="margin-bottom: 4px;">
+            <span>&times;</span>
         </a>
 
-        <!-- Скрытые поля -->
         <input type="hidden" name="q" value="{{ current_search }}">
         <input type="hidden" name="sort" value="{{ current_sort }}">
         <input type="hidden" name="order" value="{{ current_order }}">
@@ -134,7 +150,7 @@
     <div id="sync-report"></div>
 
     <div class="books-list">
-        <div class="list-header">
+        <div class="list-header book-grid">
             <span style="text-align: center;">№</span> <!-- Порядковый номер -->
             <span style="text-align: center;">Рейт.</span>
             <span></span> <!-- Обложка (пусто) -->
@@ -149,7 +165,7 @@
         </div>
 
         {% for book in books %}
-        <a href="/books/{{ book.id }}" class="book-row" style="background-color: {{ book.bg_color }}; color: {{ book.text_color }};">
+        <a href="/books/{{ book.id }}" class="book-row book-grid" style="background-color: {{ book.bg_color }}; color: {{ book.text_color }};">
 
             <!-- Порядковый номер с учетом страницы -->
             <span class="row-number">{{ showing_from + loop.index0 }}</span>

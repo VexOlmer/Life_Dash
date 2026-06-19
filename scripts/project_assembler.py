@@ -37,7 +37,7 @@ def assemble_project_code(output_filename: str = "project_snapshot.txt") -> None
     excluded_files = {
         output_filename, '.env', 'package-lock.json', 'poetry.lock', '.gitignore',
         'LICENSE', 'README.md', 'pyproject.toml',
-        'mass_update_daily_notes.py', 'project_assembler.py', 'alembic.ini', 'project_snapshot.txt'
+        'mass_update_daily_notes.py', 'project_assembler.py', 'project_snapshot.txt'
     }
 
 

@@ -1,11 +1,14 @@
 """Утилиты для преобразования данных (перевод, форматирование)."""
 
 TRANSLATIONS: dict[str, str] = {
+    
     # Статусы
     "plan": "В планах",
     "reading": "Читаю",
-    "finished": "Прочитано",
+    "finished": "Завершено",
     "dropped": "Брошено",
+    "playing": "Играю",
+    "watched": "Просмотрено",
 
     # Форматы
     "paper": "Бумажная книга",
@@ -94,6 +97,41 @@ TRANSLATIONS: dict[str, str] = {
     "english": "Английский",
     "ru": "Русский",
     "en": "Английский",
+       
+    # Доп жанры из игр
+    "shooter": "Шутер",
+    "rpg": "RPG",
+    "strategy": "Стратегия",
+    "simulation": "Симулятор",
+    "sports": "Спортивная",
+    "racing": "Гонки",
+    "sandbox": "Песочница",
+    "survival": "Выживание",
+    "puzzle": "Головоломка",
+    "platformer": "Платформер",
+    "fighting": "Файтинг",
+    "zombie": "Зомби",
+    "graphic adventure": "Квест",
+    "interactive drama": "Интерактивное кино",
+    "soulslike": "Soulslike",
+    "vr": "VR",
+    "indie": "Инди",
+    "pixel-art": "Пиксель-арт",
+
+    # Доп рейтинги из игр
+    "rating_optimization": "Оптимизация",
+    "rating_graphics": "Графика",
+    "rating_audio": "Аудио",
+    "rating_gameplay": "Геймплей",
+    "rating_price_quality": "Цена/Качество",
+    "rating_story_lore": "Сюжет и Лор",
+    "rating_immersion": "Погружение",
+    "rating_replayability": "Реиграбельность",
+    "rating_cult_status": "Культовость",
+    
+    # Платформы
+    "youtube": "YouTube",
+    "twitch": "Twitch",
 }
 
 def translate(key: str | None) -> str:
