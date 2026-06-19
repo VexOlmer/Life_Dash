@@ -266,7 +266,7 @@ def sync_daily(session: Session, force: bool = False) -> dict[str, Any]:
         try:
             db_item = repo.get_by_path(rel_path)
             if not force and db_item and db_item.last_modified >= mtime:
-                logger.debug(f"Пропуск (не менялся): {rel_path}")
+                #logger.debug(f"Пропуск (не менялся): {rel_path}")
                 continue
         except Exception as e:
             logger.error(f"Ошибка доступа к БД при поиске {rel_path}: {e}")

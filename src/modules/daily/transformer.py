@@ -137,12 +137,33 @@ class DailyTransformer:
             }
 
         # 5. Болезнь
-        ill_state, temp = None, None
-        if re.search(r"(?m)^###.*Болезнь", content):
-            ill_state = re.search(r"-.*Состояние:\s*(.+)$", content, re.M)
-            temp = re.search(r"-.*Температура:\s*([\d.]+)\s*$", content, re.M)
+        ill_state_val, temp_val = None, None
+        
+        # Ищем блок болезни. Паттерн теперь учитывает:
+        # 1. Возможный дефис перед ### (- ###)
+        # 2. Любые иконки в заголовке (.*Болезнь)
+        # 3. Захватывает контент до следующего заголовка или разделителя
+        ill_block_match = re.search(r"(?m)^-?\s*###\s*.*Болезнь\s*\n([\s\S]+?)(?=\n-?\s*#|---|$)", content)
+        
+        if ill_block_match:                        
+            state_m = re.search(r"Состояние:\s*(.+)", content)
+            temp_m = re.search(r"Температура:\s*([\d.]+)", content)
             
-            if not (ill_state and temp):
+            logger.debug(f"Найден блок Болезни. Найденный блок состояния - {state_m}, температуры - {temp_m}")
+            
+            if state_m:
+                # Если в поле написано что-то вроде "—" или оно пустое, игнорируем
+                val = state_m.group(1).strip()
+                if val and val not in ["—", "", "-"]:
+                    ill_state_val = val
+            
+            if temp_m:
+                try:
+                    temp_val = float(temp_m.group(1))
+                except ValueError:
+                    temp_val = None
+                
+            if not (ill_state_val and temp_val):
                 raise ValidationError(f"[{file_path.name}] Оба показетеля блока болезни должны быть заполнены.")
         
         # 6. Мысли
@@ -175,8 +196,8 @@ class DailyTransformer:
             muscle_pct=metrics["mus"],
             visceral_fat=metrics["vis"],
             
-            illness_state=ill_state.group(1).strip() if ill_state else None,
-            temperature=float(temp.group(1)) if temp else None,
+            illness_state=ill_state_val,
+            temperature=temp_val,
             
             has_content=has_content,
             

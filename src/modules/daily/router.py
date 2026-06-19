@@ -52,6 +52,9 @@ async def daily_hub(
     # 5. Агрегируем статистику за все 14 дней
     stats = DailyService.get_aggregated_stats(session, current_week_data + prev_week_data)
     calendar = DailyService.get_calendar_structure(session)
+    
+    # 6. Получение текущих стриков
+    current_streaks = DailyService.get_current_streaks(session)
 
     return templates.TemplateResponse(
         "pages/daily_hub.html", 
@@ -66,7 +69,9 @@ async def daily_hub(
             
             # Передаем готовые ссылки для кнопок, чтобы не считать их в HTML
             "prev_link": f"?week={prev_week_num}&year={prev_week_year}",
-            "next_link": f"?week={next_week_num}&year={next_week_year}"
+            "next_link": f"?week={next_week_num}&year={next_week_year}",
+            
+            "current_streaks": current_streaks,
         }
     )
    
@@ -133,6 +138,15 @@ async def daily_charts(
             "charts_data": charts_data,
             "target_date": end_date.strftime("%d.%m.%Y")
         }
+    )
+
+@router.get("/records", response_class=HTMLResponse)
+async def daily_records(request: Request, session: SessionDep) -> HTMLResponse:
+    """Страница рекордов дневника."""
+    records = DailyService.get_records(session)
+    return templates.TemplateResponse(
+        "pages/daily_records.html", 
+        {"request": request, "records": records}
     )
 
 @router.get("/{date_str}", response_class=HTMLResponse)
