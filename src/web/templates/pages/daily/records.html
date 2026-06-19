@@ -5,7 +5,7 @@
     
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 3rem;">
         <a href="/daily/" style="text-decoration: none; font-weight: 700; color: var(--text-muted);">← Назад к хабу</a>
-        <h1 style="font-size: 2.5rem; font-weight: 800; letter-spacing: -1.5px; margin: 0;">Зал славы Дневника</h1>
+        <h1 style="font-size: 2.5rem; font-weight: 800; letter-spacing: -1.5px; margin: 0;">Зал славы</h1>
         <div style="font-size: 2rem;">🏆</div>
     </div>
 
@@ -49,7 +49,19 @@
         {{ record_card("Макс. дневной сон", records.sleep.nap, "☀️", "#f59e0b") }}
     </div>
 
-    <!-- БЛОК 2: СЕРИИ ДИСЦИПЛИНЫ (обновленный) -->
+    <!-- БЛОК 2: РЕКОРДЫ ВЕСА -->
+    <h3 style="text-transform: uppercase; font-size: 0.8rem; letter-spacing: 2px; color: #94a3b8; margin-bottom: 20px; font-weight: 800;">Контроль веса</h3>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 25px; margin-bottom: 50px;">
+        
+        <!-- Максимальный вес -->
+        {{ record_card("Максимальный вес", records.weight_records.max, "⚖️", "#1e293b") }}
+        
+        <!-- Минимальный вес -->
+        {{ record_card("Минимальный вес", records.weight_records.min, "📉", "#10b981") }}
+        
+    </div>
+
+    <!-- БЛОК 3: СЕРИИ ДИСЦИПЛИНЫ (обновленный) -->
     <h3 style="text-transform: uppercase; font-size: 0.8rem; letter-spacing: 2px; color: #94a3b8; margin-bottom: 20px; font-weight: 800;">Анализ серий и стабильности</h3>
     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 25px; margin-bottom: 50px;">
         
@@ -92,5 +104,32 @@
         {{ streak_card("Без сахара", "🍏", records.streaks.sugar, "#0891b2", "#ea580c", "#ecfeff", "#fff7ed") }}
 
     </div>
+
+    <h3 style="text-transform: uppercase; font-size: 0.8rem; letter-spacing: 2px; color: #94a3b8; margin-top: 40px; margin-bottom: 20px; font-weight: 800;">Рекорды активности (Топ-5)</h3>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 25px; margin-bottom: 50px;">
+        
+        <!-- Шаги -->
+        <div style="background: white; padding: 25px; border-radius: 28px; border: 1px solid #f1f5f9; box-shadow: var(--shadow);">
+            <h4 style="margin-bottom: 15px;">👣 Шаги</h4>
+            {% for rec in records.activity.steps %}
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #f8fafc;">
+                <span style="font-weight: 800; color: #6366f1;">{{ rec.val }}</span>
+                <a href="/daily/{{ rec.iso_date }}" style="font-size: 0.8rem; color: #94a3b8; text-decoration: none;">{{ rec.display_date }} →</a>
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- Калории -->
+        <div style="background: white; padding: 25px; border-radius: 28px; border: 1px solid #f1f5f9; box-shadow: var(--shadow);">
+            <h4 style="margin-bottom: 15px;">🔥 Калории</h4>
+            {% for rec in records.activity.calories %}
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #f8fafc;">
+                <span style="font-weight: 800; color: #f97316;">{{ rec.val }}</span>
+                <a href="/daily/{{ rec.iso_date }}" style="font-size: 0.8rem; color: #94a3b8; text-decoration: none;">{{ rec.display_date }} →</a>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    
 </div>
 {% endblock %}

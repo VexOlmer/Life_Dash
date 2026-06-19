@@ -165,7 +165,7 @@ async def list_games(
     }
 
     return templates.TemplateResponse(
-        "pages/games.html", 
+        "pages/games/list.html", 
         {
             "request": request,
             "games": games,
@@ -225,7 +225,7 @@ async def game_detail(request: Request, game_id: int, session: SessionDep) -> HT
     extra_content = GameService.get_game_content(game.file_path)
 
     return templates.TemplateResponse(
-        "pages/game_detail.html", 
+        "pages/games/detail.html",
         {
             "request": request, 
             "game": game, 

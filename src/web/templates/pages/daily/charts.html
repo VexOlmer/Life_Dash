@@ -80,6 +80,21 @@
             <canvas id="napSleepChart"></canvas>
         </div>
 
+        <!-- ГЕОГРАФИЯ -->
+        <div class="chart-container">
+            <h3 class="chart-title"><span>📍</span> Локации (дней за месяц)</h3>
+            <canvas id="cityChart"></canvas>
+        </div>
+
+        <div class="chart-container">
+            <h3 class="chart-title"><span>👣</span> Динамика шагов</h3>
+            <canvas id="stepsChart"></canvas>
+        </div>
+        <div class="chart-container">
+            <h3 class="chart-title"><span>🔥</span> Расход калорий</h3>
+            <canvas id="caloriesChart"></canvas>
+        </div>
+
         <!-- ЛИЧНЫЕ ПОКАЗАТЕЛИ -->
         <div class="chart-container">
             <h3 class="chart-title"><span>⚖️</span> Динамика веса (кг)</h3>
@@ -247,12 +262,36 @@ new Chart(document.getElementById('napSleepChart'), {
     options: getFixedBarOptions(4)
 });
 
+new Chart(document.getElementById('cityChart'), {
+    type: 'bar',
+    data: {
+        labels: data.cities.labels,
+        datasets: [{
+            data: data.cities.values,
+            backgroundColor: '#6366f1',
+            borderRadius: 8,
+            barThickness: 20
+        }]
+    },
+    options: {
+        indexAxis: 'y', // Делаем график горизонтальным
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: {
+            x: { beginAtZero: true, ticks: { stepSize: 1, color: '#94a3b8' }, grid: { color: '#f8fafc' } },
+            y: { grid: { display: false }, ticks: { font: { weight: '700' }, color: '#475569' } }
+        }
+    }
+});
+
 // 3. Метрики (с мягким масштабом)
 createLine('weightChart', 'Вес', data.metrics.weight, '#ef4444', '50%');
 createLine('bmiChart', 'ИМТ', data.metrics.bmi, '#3b82f6', '50%');
 createLine('fatChart', 'Жир', data.metrics.fat, '#f59e0b', '60%');
 createLine('muscleChart', 'Мышцы', data.metrics.muscle, '#10b981', '60%');
 createLine('visceralChart', 'Индекс', data.metrics.visceral, '#8b5cf6', '100%');
+createLine('stepsChart', 'Шаги', data.activity.steps, '#6366f1', '20%');
+createLine('caloriesChart', 'Калории', data.activity.calories, '#f97316', '20%');
 
 </script>
 {% endblock %}

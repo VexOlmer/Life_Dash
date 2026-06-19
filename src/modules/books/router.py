@@ -166,7 +166,7 @@ async def list_books(
     }
     
     return templates.TemplateResponse(
-        "pages/books.html", 
+        "pages/books/list.html", 
         {
             "request": request,
             "books": books, 
@@ -235,7 +235,7 @@ async def book_detail(request: Request, book_id: int, session: SessionDep) -> HT
     extra_content = BookService.get_book_content(book.file_path)
 
     return templates.TemplateResponse(
-        "pages/book_detail.html", 
+        "pages/books/detail.html", 
         {
             "request": request, 
             "book": book, 

@@ -57,7 +57,7 @@ async def daily_hub(
     current_streaks = DailyService.get_current_streaks(session)
 
     return templates.TemplateResponse(
-        "pages/daily_hub.html", 
+        "pages/daily/hub.html", 
         {
             "request": request,
             "current_week": current_week_data,
@@ -132,7 +132,7 @@ async def daily_charts(
     charts_data = DailyService.prepare_charts_json(prepared_days)
 
     return templates.TemplateResponse(
-        "pages/daily_charts.html", 
+        "pages/daily/charts.html", 
         {
             "request": request,
             "charts_data": charts_data,
@@ -145,7 +145,7 @@ async def daily_records(request: Request, session: SessionDep) -> HTMLResponse:
     """Страница рекордов дневника."""
     records = DailyService.get_records(session)
     return templates.TemplateResponse(
-        "pages/daily_records.html", 
+        "pages/daily/records.html", 
         {"request": request, "records": records}
     )
 
@@ -161,7 +161,7 @@ async def daily_detail(request: Request, date_str: str, session: SessionDep) -> 
     content = DailyService.get_daily_content(note.file_path)
 
     return templates.TemplateResponse(
-        "pages/daily_detail.html", 
+        "pages/daily/detail.html", 
         {
             "request": request, 
             "note": note, 

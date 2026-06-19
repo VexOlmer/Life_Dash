@@ -40,6 +40,10 @@ class DailyNote(SQLModel, table=True):
     muscle_pct: float | None = None
     visceral_fat: float | None = None
     
+    # Активность
+    steps: int | None = Field(default=None)
+    calories: int | None = Field(default=None)
+    
     # Болезнь
     illness_state: str | None = None
     temperature: float | None = None

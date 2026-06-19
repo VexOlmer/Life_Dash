@@ -164,43 +164,61 @@ class DailyService:
     @staticmethod
     def prepare_charts_json(weeks_data: list) -> dict:
         """Подготавливает чистые списки данных для отрисовки в Chart.js."""
+        from collections import Counter
+        
         labels = [d["display_date"] for d in weeks_data]
         
         # Показатели Сна
-        sleep_night = []
-        sleep_nap = []
+        sleep_night, sleep_nap = [], []
         
         # Дневник самоконтроля (Да = 1, Нет = 0, Нет данных = null)
-        workout = []
-        sugar = []
+        workout, sugar = [], []
         
         # Показатели Веса
-        weight = []
-        bmi = []
-        fat = []
-        muscle = []
-        visceral = []
+        weight, bmi, fat, muscle, visceral = [], [], [], [], []
+        
+        # Шаги и калории
+        steps, calories = [], []
 
         for d in weeks_data:
             note = d["note"]
             if note:
                 sleep_night.append(round(note.night_sleep_minutes / 60, 1))
                 sleep_nap.append(round(note.nap_mins / 60, 1))
+                
                 workout.append(1 if note.morning_workout == "Да" else 0)
                 sugar.append(1 if note.added_sugar == "Да" else 0)
+                
                 weight.append(note.weight)
                 bmi.append(note.bmi)
                 fat.append(note.fat_pct)
                 muscle.append(note.muscle_pct)
                 visceral.append(note.visceral_fat)
+                
+                steps.append(note.steps)
+                calories.append(note.calories)
             else:
                 # Если дня нет в БД, вставляем None для разрыва в графике
-                for lst in [sleep_night, sleep_nap, workout, sugar, weight, bmi, fat, muscle, visceral]:
+                for lst in [sleep_night, sleep_nap, workout, sugar, weight, bmi, fat, muscle, visceral, steps, calories]:
                     lst.append(None)
         
+        # Дневник самоконтроля
         workout_list = [1 if d["note"] and d["note"].morning_workout == "Да" else 0 for d in weeks_data]
         # Сахар инвертируем: 1 если сахара НЕ БЫЛО (успех)
         sugar_list = [1 if d["note"] and d["note"].added_sugar == "Нет" else 0 for d in weeks_data]
+        
+        all_cities = [d["note"].city for d in weeks_data if d["note"] and d["note"].city]
+        city_stats = dict(Counter(all_cities)) # Получим {'Omsk': 25, 'Sochi': 5}
+
+        for d in weeks_data:
+            note = d["note"]
+            if note:
+                # ... существующие append ...
+                steps.append(note.steps)
+                calories.append(note.calories)
+            else:
+                for lst in [steps, calories]: # добавляем в список очистки при отсутствии дня
+                    lst.append(None)
 
         return {
             "labels": labels,
@@ -215,7 +233,15 @@ class DailyService:
                 "sugar": sugar_list,
                 "workout_pct": int(sum(workout_list) / len(weeks_data) * 100),
                 "sugar_pct": int(sum(sugar_list) / len(weeks_data) * 100)
-            }
+            },
+            "cities": {
+                "labels": list(city_stats.keys()),
+                "values": list(city_stats.values())
+            },
+            "activity": {
+                "steps": steps,
+                "calories": calories
+            },
         }
         
     @staticmethod
@@ -386,6 +412,39 @@ class DailyService:
                 "avg_pos": round(sum(p[0] for p in pos_periods)/len(pos_periods), 1) if pos_periods else 0,
                 "avg_neg": round(sum(p[0] for p in neg_periods)/len(neg_periods), 1) if neg_periods else 0
             }
+        
+        # --- 4. РЕКОРДЫ ВЕСА ---
+        # Берем только дни, где вес указан и больше 0
+        weight_notes = [n for n in notes if n.weight and n.weight > 0]
+        max_w = max(weight_notes, key=lambda n: n.weight) if weight_notes else None
+        min_w = min(weight_notes, key=lambda n: n.weight) if weight_notes else None
+
+        def build_weight_record(note: DailyNote) -> dict[str: str]:
+            """Вспомогательная функция для сборки словаря рекордов веса."""
+            if not note:
+                return {"val": "-", "display_date": "-", "iso_date": None}
+            return {
+                "val": f"{note.weight} кг",
+                "display_date": DailyService._format_date_ru(note.date),
+                "iso_date": note.date
+            }
+        
+        # --- 5. Рекорды активности ---
+        # Топ 5 Шагов
+        steps_notes = [n for n in notes if n.steps]
+        top_steps = sorted(steps_notes, key=lambda n: n.steps, reverse=True)[:5]
+        
+        # Топ 5 Калорий
+        cal_notes = [n for n in notes if n.calories]
+        top_calories = sorted(cal_notes, key=lambda n: n.calories, reverse=True)[:5]
+        
+        def build_act_record(note: DailyNote, attr: str, unit: str) -> dict[str: str]:
+            """Вспомогательная функция для сборки словаря рекордов Шагов и Калорий."""
+            return {
+                "val": f"{getattr(note, attr):,} {unit}".replace(",", " "),
+                "display_date": DailyService._format_date_ru(note.date),
+                "iso_date": note.date
+            }
 
         return {
             "sleep": {
@@ -398,5 +457,13 @@ class DailyService:
             "streaks": {
                 "workout": calc_detailed_streaks("morning_workout", "Да"),
                 "sugar": calc_detailed_streaks("added_sugar", "Нет")
+            },
+            "weight_records": {
+                "max": build_weight_record(max_w),
+                "min": build_weight_record(min_w)
+            },
+            "activity": {
+                "steps": [build_act_record(n, "steps", "") for n in top_steps],
+                "calories": [build_act_record(n, "calories", "ккал") for n in top_calories]
             }
         }

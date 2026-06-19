@@ -19,7 +19,9 @@
                         <span style="background: rgba(255,255,255,0.1); padding: 4px 12px; border-radius: 8px; font-size: 0.8rem; font-weight: 800; text-transform: uppercase; letter-spacing: 1px;">
                             {{ note.date }}
                         </span>
-                        <span style="color: #94a3b8; font-weight: 600;">{{ note.city }}</span>
+                        <span style="color: #94a3b8; font-weight: 700; font-size: 0.9rem; display: flex; align-items: center; gap: 5px;">
+                            📍 {{ note.city }}
+                        </span>
                     </div>
                     <h1 style="font-size: 3.5rem; font-weight: 800; margin: 0; letter-spacing: -2px;">
                         {{ "Понедельник" if "Mon" in note.date else "День жизни" }}
@@ -87,6 +89,8 @@
                 </h3>
                 <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 20px;">
                     {% set metrics = [
+                        ('Шаги', note.steps, '', '#6366f1'),
+                        ('Калории', note.calories, 'ккал', '#f97316'),
                         ('Вес', note.weight, 'кг', '#ef4444'),
                         ('ИМТ', note.bmi, '', '#3b82f6'),
                         ('Жир', note.fat_pct, '%', '#f59e0b'),

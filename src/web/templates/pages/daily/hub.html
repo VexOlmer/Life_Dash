@@ -6,9 +6,16 @@
 {% macro day_card(day) %}
 <a href="{% if day.note %}/daily/{{ day.date }}{% else %}#{% endif %}" 
    class="day-card {{ 'empty' if not day.note }} {{ 'ill' if day.note and day.note.illness_state }}">
-    
+
     <div class="day-card-header">
-        <span class="name">{{ day.day_name }}</span>
+        <div style="display: flex; flex-direction: column;">
+            <span class="name">{{ day.day_name }}</span>
+            {% if day.note %}
+                <span style="font-size: 0.6rem; color: #94a3b8; font-weight: 700; text-transform: uppercase; margin-top: 2px;">
+                    📍 {{ day.note.city }}
+                </span>
+            {% endif %}
+        </div>
         <span class="date">{{ day.display_date }}</span>
     </div>
     
@@ -51,6 +58,13 @@
             <div style="margin-top: 12px; display: flex; flex-wrap: wrap; gap: 4px;">
                 {% if day.note.weight %}
                     <div class="mini-tag">⚖️ {{ day.note.weight }}</div>
+                {% endif %}
+
+                {% if day.note.steps %}
+                    <div class="mini-tag">👣 {{ "{:,}".format(day.note.steps).replace(",", " ") }}</div>
+                {% endif %}
+                {% if day.note.calories %}
+                    <div class="mini-tag">🔥 {{ day.note.calories }}</div>
                 {% endif %}
                 
                 {% if day.note.temperature %}

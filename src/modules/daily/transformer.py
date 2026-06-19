@@ -56,16 +56,24 @@ class DailyTransformer:
         content = file_path.read_text(encoding="utf-8")
         post = frontmatter.loads(content)
         meta = post.metadata
+        filename = file_path.name
         
-        # 1. Конвертация даты: 17-06-2026 -> 2026-06-17
+        # 1. Дата (Имя файла)
+        # Конвертация даты: 17-06-2026 -> 2026-06-17
         try:
             date_obj = datetime.strptime(file_path.stem, "%d-%m-%Y")
             db_date_str = date_obj.strftime("%Y-%m-%d")
         except ValueError as e:
-            logger.error(f"Имя файла должно быть в формате DD-MM-YYYY: {file_path.name}. Ошибка - {e}.")
-            raise ValidationError(f"Имя файла должно быть в формате DD-MM-YYYY: {file_path.name}.") from e
+            logger.error(f"Имя файла должно быть в формате DD-MM-YYYY: {filename}. Ошибка - {e}.")
+            raise ValidationError(f"Имя файла должно быть в формате DD-MM-YYYY: {filename}.") from e
+        
+        # 2. Город
+        city = meta.get("city")
+        if not city or city == "Unknown":
+            logger.error(f"[{filename}] Поле 'city' в YAML не заполнено")
+            raise ValidationError(f"[{filename}] Поле 'city' в YAML не заполнено")
 
-        # 2. Валидация блока Сон
+        # 3. Сон
         # Обязательное наличие Лег и Встал, опциональное Дневной сон
         sleep_from, sleep_to, nap_mins = None, None, 0
         if re.search(r"(?m)^##.*Сон", content):
@@ -73,9 +81,14 @@ class DailyTransformer:
             t = re.search(r"-.*Встал:\s*(\d{2}:\d{2})\s*$", content, re.M)
             
             if not (f and t):
+                logger.error(f"[{file_path.name}] Поля 'Лег' и 'Встал' обязательны в блоке Сна.")
                 raise ValidationError(f"[{file_path.name}] Поля 'Лег' и 'Встал' обязательны в блоке Сна.")
             
-            sleep_from, sleep_to = f.group(1), t.group(1)
+            sleep_from, sleep_to = f.group(1).strip(), t.group(1).strip()
+            
+            if sleep_from in ["—", "-", ":"] or sleep_to in ["—", "-", ":"]:
+                logger.error(f"[{filename}] Поля Сна не заполнены или имеют неверный формат")
+                raise ValidationError(f"[{filename}] Поля Сна не заполнены или имеют неверный формат")
             
             # Ищем саму строку "Дневной сон"
             nap_line_match = re.search(r"- Дневной сон:\s*(.*)$", content, re.M)
@@ -93,7 +106,7 @@ class DailyTransformer:
                 # Самой строки нет — это нормально, пишем 0
                 nap_mins = 0
         
-        # 3. Валидация Дневника самоконтроля
+        # 3. Дневник самоконтроля
         morning_workout, added_sugar = None, None
         if re.search(r"(?m)^##.*Дневник самоконтроля", content):
             m_w = re.search(r"^-\s*.*Утренняя разминка:\s*(.+)$", content, re.M)
@@ -119,7 +132,7 @@ class DailyTransformer:
                     f"Дополнительный сахар='{added_sugar}'. Допустимы только 'Да' или 'Нет'."
                 )
 
-        # 4. Валидация блока Личные показатели
+        # 4. Личные показатели
         metrics = {"w": None, "bmi": None, "fat": None, "mus": None, "vis": None}
         if re.search(r"(?m)^##.*Личные показатели", content):
             w = re.search(r"- Вес:\s*([\d.]+)\s*кг$", content, re.M)
@@ -129,14 +142,48 @@ class DailyTransformer:
             vis = re.search(r"- Уровень висцерального жира:\s*([\d.]+)\s*$", content, re.M)
             
             if not (w and bmi and fat and mus and vis):
+                logger.error(f"[{file_path.name}] Все 5 личных показателей должны быть заполнены.")
                 raise ValidationError(f"[{file_path.name}] Все 5 личных показателей должны быть заполнены.")
             
             metrics = {
                 "w": float(w.group(1)), "bmi": float(bmi.group(1)),
                 "fat": float(fat.group(1)), "mus": float(mus.group(1)), "vis": float(vis.group(1))
             }
+            
+        # 5. Общая активность
+        steps_val, calories_val = None, None
+        
+        # Ищем блок между комментариями START и END
+        activity_block_match = re.search(
+            r"<!-- GENERAL_ACTIVITY_START -->([\s\S]+?)<!-- GENERAL_ACTIVITY_END -->", 
+            content
+        )
+        
+        if activity_block_match:
+            block_text = activity_block_match.group(1)
+            
+            # Поиск значений по тексту (без учета иконок в начале строки)
+            s_match = re.search(r"Шаги:\s*(.*)$", block_text, re.M)
+            c_match = re.search(r"Сожжённые калории:\s*(.*)$", block_text, re.M)
+            
+            if not s_match or not c_match:
+                raise ValidationError(f"[{file_path.name}] В блоке активности должны быть и Шаги, и Калории.")
+            
+            s_raw = s_match.group(1).strip()
+            c_raw = c_match.group(1).strip()
+            
+            # Если строки найдены, они обязаны быть числами
+            if not s_raw or not c_raw:
+                logger.error(f"[{file_path.name}] Поля активности не могут быть пустыми, если блок присутствует.")
+                raise ValidationError(f"[{file_path.name}] Поля активности не могут быть пустыми, если блок присутствует.")
+            
+            try:
+                steps_val = int(s_raw)
+                calories_val = int(c_raw)
+            except ValueError as e:
+                raise ValidationError(f"[{file_path.name}] Шаги и Калории должны быть целыми числами без лишних символов.") from e
 
-        # 5. Болезнь
+        # 6. Болезнь
         ill_state_val, temp_val = None, None
         
         # Ищем блок болезни. Паттерн теперь учитывает:
@@ -195,6 +242,9 @@ class DailyTransformer:
             fat_pct=metrics["fat"],
             muscle_pct=metrics["mus"],
             visceral_fat=metrics["vis"],
+            
+            steps=steps_val,
+            calories=calories_val,
             
             illness_state=ill_state_val,
             temperature=temp_val,
