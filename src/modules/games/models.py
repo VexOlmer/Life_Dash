@@ -174,9 +174,9 @@ class Game(SQLModel, table=True):
             Рассчитывает процент прохождения.
             
             Приоритет:
-            1. Если игра завершена (finished), всегда 100%.
-            2. Если игра в процессе и есть эталон (hours_to_beat), считаем долю.
-            3. Если эталона нет, но статус finished - 100%, иначе 0%.
+                1. Если игра завершена (finished), всегда 100%.
+                2. Если игра в процессе и есть эталон (hours_to_beat), считаем долю.
+                3. Если эталона нет, но статус finished - 100%, иначе 0%.
         """
         
         # Если игра завершена ИЛИ просмотрена — это 100%
@@ -312,12 +312,7 @@ class Game(SQLModel, table=True):
 
     @property
     def days_in_backlog(self) -> int | None:
-        """
-            Кол-во дней между покупкой и первой сессией.
-            
-            Returns:
-                int | None: кол-во дней между покупкой и первой сессией или None.
-        """
+        """Рассчитывает кол-во дней между покупкой игры и первой сессией."""
         p_date = self._parse_date(self.purchase_date)
         s = self.playing_sessions
         if not p_date or not s:
@@ -335,12 +330,9 @@ class Game(SQLModel, table=True):
     @property
     def days_to_completion(self) -> int | None:
         """
-            Кол-во дней от покупки до завершения сюжета.
+            Рассчитывает кол-во дней от покупки игры до завершения сюжета.
             
             Завершения сюжета определяется наличием в комментарии сессии знака !.
-            
-            Returns:
-                int | None: кол-во дней между покупкой и завершением сюжета или None.
         """
         
         p_date = self._parse_date(self.purchase_date)

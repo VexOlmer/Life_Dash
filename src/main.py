@@ -18,25 +18,12 @@ from src.web.router import router as web_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """
-        Управляет жизненным циклом приложения.
-
-        Выполняет инициализацию базы данных при запуске и логирует
-            события старта и остановки.
-
-        Args:
-            app: Экземпляр приложения FastAPI.
-        
-        Returns:
-            AsyncGenerator[None, None]: Жизненный цикл сайта.
-    """
+    """Управляет жизненным циклом приложения."""
     
-    # --- Действия при запуске (Startup) ---
     logger.info("Запуск приложения Obsidian Analytics...")
     
     yield  # Принятие запросов приложением
-    
-    # --- Действия при остановке (Shutdown) ---
+
     logger.info("Остановка приложения...")
 
 

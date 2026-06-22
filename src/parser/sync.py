@@ -33,7 +33,8 @@ def _base_sync(
     """
         Синхронизация модулей по данным из заметок базы знаний Obsidian.
     
-        Если файл не менялся, пропускается, иначе файл парсится и обновляется информация в БД.
+        Если файл не менялся, пропускается, иначе файл парсится и добавляется в сессию.
+        Все изменения фиксируются одним коммитом (атомарно) в конце работы.
         Если обработка заметки завершилась ошибкой, она не будет добавлена в БД.
         
         Args:
@@ -107,6 +108,10 @@ def _base_sync(
             logger.error(f"Ошибка в {rel_path}: {e}")
             stats["errors"] += 1
             stats["error_details"].append({"file": rel_path, "error": str(e)})
+            
+    if stats["updated"] > 0 or stats["deleted"] > 0:
+        session.commit()
+        stats_cache.clear()
 
     stats_cache.clear()
     logger.info(f"Синхронизация [{model_name_ru}] завершена за {round(time.time() - start_time, 2)}с.")

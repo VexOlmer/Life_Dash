@@ -214,17 +214,7 @@ async def sync_books_endpoint(
 
 @router.get("/{book_id}")
 async def book_detail(request: Request, book_id: int, session: SessionDep) -> HTMLResponse:
-    """
-        Детальная страница книги.
-
-        Args:
-            request: Объект HTTP-запроса
-            book_id: Путь к файлу в Obsidian Vault
-            session: Текущая сессия
-        
-        Returns:
-            HTMLResponse: Обновленный шаблон страницы
-    """
+    """Детальная страница книги."""
     
     book = session.get(Book, book_id)
     if not book:

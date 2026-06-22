@@ -155,7 +155,6 @@ class Book(SQLModel, table=True):
     @property
     def detailed_genres_list_ru(self) -> list[dict[str, str]]:
         """Локализация список жанров и поджанров."""
-        
         results = []
         for g in self.detailed_genres_list:
             name_ru = translate(g["name"])

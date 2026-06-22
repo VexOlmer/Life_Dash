@@ -50,18 +50,18 @@ class Settings(BaseSettings):
     
     # Группировка тегов временных логов
     TIME_CATEGORIES: dict[str, list[str]] = {
-        "Развитие": ["study", "programming", "science", "language", "reading"],
-        "Досуг": ["gaming", "movie", "series", "channel", "social"],
-        "Работа": ["work", "project"],
-        "Жизнь": ["sport", "routine", "hobby", "health"]
+        "Education": ["study", "programming", "science", "language", "reading"],
+        "Leisure": ["gaming", "movie", "series", "channel", "social"],
+        "Work": ["work"],
+        "Life": ["sport", "routine", "hobby", "health", "project"]
     }
 
     # Недельние бюджеты времени
     TIME_BUDGETS: dict[str, int] = {
-        "Развитие": 15,    # ~2 часа в день
-        "Досуг": 10,       # лимит
-        "Работа": 40,      # стандарт
-        "Жизнь": 12        # спорт, быт
+        "Education": 30,        # Образование
+        "Leisure": 14,          # Развлечения
+        "Work": 40,             # Работа
+        "Life": 14              # Жизнь
     }
 
 

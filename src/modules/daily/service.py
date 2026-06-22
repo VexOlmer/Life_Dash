@@ -1,11 +1,10 @@
 """Сервис для извлечения контента из ежедневных заметок."""
 
-import re
 from datetime import date, datetime, timedelta
 
 from sqlmodel import Session, select
 
-from src.common.utils import format_date_ru
+from src.common.utils import extract_section, format_date_ru
 from src.core.config import settings
 from src.core.logger import logger
 
@@ -255,24 +254,13 @@ class DailyService:
 
         content = full_path.read_text(encoding="utf-8")
 
-        def extract_section(keyword: str) -> str:
-            pattern = rf"(?m)^##\s+[^#\n]*?{re.escape(keyword)}[^\n]*\n(.*?)(?=\n##(?![#])|\n---|\Z)"
-            match = re.search(pattern, content, flags=re.DOTALL)
-            
-            if match:
-                text = match.group(1).strip()
-                logger.debug(f"Секция '{keyword}' успешно захвачена. Символов: {len(text)}")
-                return text
-            
-            logger.warning(f"Секция '{keyword}' не найдена в {relative_path}")
-            return ""
-
         return {
-            "mind": extract_section("Мысли"),
+            "mind": extract_section(content=content, keyword="Мысли"),
         }
+        
     
     @staticmethod
-    def get_records(session: Session) -> dict:
+    def get_records(session: Session) -> dict[str: str]:
         """
             Рассчет различных рекордов и средних показателей по всем ежедневным заметкам.
             
@@ -280,7 +268,7 @@ class DailyService:
                 session: Текущая сессия БД.
             
             Returns:
-                session: Текущая сессия БД.
+                dict[str: str]: Различные рекордные показатели.
         """
         
         notes = session.exec(select(DailyNote).order_by(DailyNote.date)).all()
@@ -311,7 +299,7 @@ class DailyService:
         
         avg_bedtime = min_to_time(sum(sleep_from_mins)/len(sleep_from_mins)) if sleep_from_mins else "--:--"
         avg_wakeuptime = min_to_time(sum(sleep_to_mins)/len(sleep_to_mins)) if sleep_to_mins else "--:--"
-        logger.info(f"Среднее время засыпания - {avg_bedtime}.\nСреднее время подъема - {avg_wakeuptime}")
+        logger.debug(f"Среднее время засыпания - {avg_bedtime}.\nСреднее время подъема - {avg_wakeuptime}")
 
         # --- 2. РЕКОРДЫ СНА ---
         sleep_notes = [n for n in notes if n.night_sleep_minutes > 0]
@@ -390,12 +378,12 @@ class DailyService:
             # Расчет средних значений
             avg_pos = round(sum(p[0] for p in pos_periods) / len(pos_periods), 1) if pos_periods else 0
             avg_neg = round(sum(p[0] for p in neg_periods) / len(neg_periods), 1) if neg_periods else 0
-            logger.info(f"Средний положительный период - {avg_pos}.\nСредний отрицательный период - {avg_neg}")
+            logger.debug(f"Средний положительный период - {avg_pos}.\nСредний отрицательный период - {avg_neg}")
 
             max_pos_info = get_max_info(pos_periods)
             max_neg_info = get_max_info(neg_periods)
-            logger.info(f"Максимальный положительный период - {max_pos_info["range"]}, длительность - {max_pos_info["val"]}")
-            logger.info(f"Максимальный отрицательрный период - {max_neg_info["range"]}, длительность - {max_neg_info["val"]}")
+            logger.debug(f"Максимальный положительный период - {max_pos_info["range"]}, длительность - {max_pos_info["val"]}")
+            logger.debug(f"Максимальный отрицательрный период - {max_neg_info["range"]}, длительность - {max_neg_info["val"]}")
 
             return {
                 "max_pos": max_pos_info["val"],

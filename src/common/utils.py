@@ -2,6 +2,8 @@
 
 import re
 
+from src.core.logger import logger
+
 TRANSLATIONS: dict[str, str] = {
     
     # Статусы
@@ -153,6 +155,9 @@ def parse_duration_to_minutes(dur_str: str | None) -> int:
         
         Args:
             dur_str: Строка с указанием потраченного времени.
+            
+        Returns:
+            int: Кол-во минут.
     """
     
     if not dur_str:
@@ -205,3 +210,30 @@ def format_date_ru(date_iso: str) -> str:
         return "-"
     y, m, d = date_iso.split("-")
     return f"{d}.{m}.{y}"
+
+def extract_section(content: str, keyword: str) -> str:
+    """
+        Вырезает текст секции Markdown, ограниченный заголовками ##.
+        
+        Args:
+            content: Весь текст заметки.
+            keyword: Ключевое слово для поиска в заголовке (напр. 'Мысли').
+            
+        Returns:
+            str: Очищенный текст секции или пустая строка.
+    """
+    
+    # Паттерн: 
+    # (?m)^## - начало строки с ##
+    # [^\n]*?{re.escape(keyword)}[^\n]* - заголовок, содержащий ключевое слово
+    # \n(.*? ) - захват контента до...
+    # (?=\n##(?![#])|\n---|\Z) - ...следующего заголовка ##, разделителя --- или конца файла
+    pattern = rf"(?m)^##\s+[^\n]*?{re.escape(keyword)}[^\n]*\n(.*?)(?=\n##(?![#])|\n---|\Z)"
+    
+    match = re.search(pattern, content, flags=re.DOTALL)
+    if match:
+        text = match.group(1).strip()
+        logger.debug(f"Секция '{keyword}' извлечена ({len(text)} симв.)")
+        return text
+    
+    return ""

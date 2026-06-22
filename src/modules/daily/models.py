@@ -56,12 +56,6 @@ class DailyNote(SQLModel, table=True):
             Расчет только ночного сна (без учета дневного).
             
             Для обработки перехода между сутками к результату добавляется 24 часа.
-            
-            Args:
-                None
-            
-            Returns:
-                int: Кол-во минут ночного сна.
         """
         
         if not self.sleep_from or not self.sleep_to:
