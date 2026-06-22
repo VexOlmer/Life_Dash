@@ -66,7 +66,6 @@ async def index(request: Request, session: SessionDep) -> HTMLResponse:
         "pages/index.html", {"request": request, "stats": new_stats}
     )
     
-@router.get("/time/", response_class=HTMLResponse)
 @router.get("/money/", response_class=HTMLResponse)
 @router.get("/sport/", response_class=HTMLResponse)
 async def construction(request: Request) -> HTMLResponse:

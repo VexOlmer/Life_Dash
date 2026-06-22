@@ -1,5 +1,7 @@
 """Утилиты для преобразования данных (перевод, форматирование)."""
 
+import re
+
 TRANSLATIONS: dict[str, str] = {
     
     # Статусы
@@ -142,3 +144,64 @@ def translate(key: str | None) -> str:
     # Пытаемся найти ключ в словаре (приводим к нижнему регистру на случай опечаток)
     low_key = key.lower().strip()
     return TRANSLATIONS.get(low_key, key.capitalize())
+
+def parse_duration_to_minutes(dur_str: str | None) -> int:
+    """
+        Универсальный парсер строки времени в минуты.
+        
+        Поддерживает форматы: '1h 20m', '2h', '45m', '01:30'.
+        
+        Args:
+            dur_str: Строка с указанием потраченного времени.
+    """
+    
+    if not dur_str:
+        return 0
+    
+    total = 0
+    dur_str = str(dur_str).lower().strip()
+
+    # 1. Проверка формата ЧЧ:ММ
+    if ":" in dur_str:
+        try:
+            parts = dur_str.split(":")
+            if len(parts) >= 2:
+                return int(parts[0]) * 60 + int(parts[1])
+        except ValueError as e:
+            raise ValueError(f"Ошибка обработки строки временной затраты. Ошибка - {e}") from e
+
+    # 2. Проверка форматов h и m (1h 20m)
+    h_match = re.search(r'(\d+)\s*h', dur_str)
+    m_match = re.search(r'(\d+)\s*m', dur_str)
+    
+    if h_match:
+        total += int(h_match.group(1)) * 60
+    if m_match:
+        total += int(m_match.group(1))
+
+    # 3. Если просто число ("45"), считаем за минуты
+    if not h_match and not m_match and dur_str.isdigit():
+        total = int(dur_str)
+
+    return total
+
+def format_minutes_to_pretty(total_minutes: int) -> str:
+    """Конвертирует минуты в строку вида '2ч 15м' или '45м'."""
+    if total_minutes <= 0:
+        return "-"
+    
+    h = total_minutes // 60
+    m = total_minutes % 60
+    
+    if h > 0 and m > 0:
+        return f"{h}ч {m}м"
+    if h > 0:
+        return f"{h}ч"
+    return f"{m}м"
+
+def format_date_ru(date_iso: str) -> str:
+    """Превращает YYYY-MM-DD в DD.MM.YYYY для отображения."""
+    if not date_iso or len(date_iso) < 10:
+        return "-"
+    y, m, d = date_iso.split("-")
+    return f"{d}.{m}.{y}"

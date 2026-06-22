@@ -36,7 +36,6 @@ class BookTransformer:
         try:
             post = frontmatter.load(file_path)
         except Exception as e:
-            logger.error(f"Не удалось прочитать YAML в {file_path.name}")
             raise ValidationError(f"Ошибка структуры YAML: {e}") from e
         
         meta = post.metadata
@@ -94,7 +93,7 @@ class BookTransformer:
             rating_recommend=meta.get("rating_recommend"),
             
             # Находим относительный путь к файлу относительно всей базы
-            file_path=str(file_path.relative_to(vault_path)),
+            file_path=file_path.relative_to(vault_path).as_posix(),
             last_modified=mtime,
             created_at=str(meta.get("created", ""))
         )

@@ -38,31 +38,34 @@ class BaseRepository(Generic[T]):
         statement = select(self.model_type).where(
             self.model_type.file_path == relative_path # type: ignore
         )
-        return self.session.exec(statement).first()
+        return self.session.exec(statement).first()        
 
     def upsert(self, instance: T) -> None:
-        """
-            Обновляет существующую запись или создает новую.
-
-            Args:
-                instance: Экземпляр модели.
-            
-            Returns:
-                None
-        """
-        
-        existing = self.get_by_path(instance.file_path)  # type: ignore
+        """Обновляет существующую запись или создает новую."""
+        # Нормализуем путь перед поиском (на всякий случай)
+        path = getattr(instance, "file_path", None)
+        existing = self.get_by_path(path) if path else None
 
         if existing:
-            # Превращаем модель в словарь и обновляем поля
-            data = instance.model_dump(exclude={"id"})
+            # Обновляем все поля, кроме первичных ключей
+            # У книг это 'id', у дневника это 'date'
+            data = instance.model_dump(exclude={"id", "date"})
             for key, value in data.items():
                 setattr(existing, key, value)
+            
+            # Явное обновление связей (для TimeLog)
+            if hasattr(instance, "time_logs"):
+                existing.time_logs = instance.time_logs # type: ignore
+                
             self.session.add(existing)
         else:
             self.session.add(instance)
         
-        self.session.commit()
+        try:
+            self.session.commit()
+        except Exception as e:
+            self.session.rollback()
+            raise e
 
     def delete_by_path(self, relative_path: str) -> None:
         """

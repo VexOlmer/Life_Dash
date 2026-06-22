@@ -94,7 +94,7 @@ class Game(SQLModel, table=True):
     
     @field_validator("purchase_date", mode="before")
     @classmethod
-    def validate_purchase_date(cls, v: Any) -> str | None:
+    def validate_purchase_date(cls, v: Any) -> str | None:  # noqa: ANN401
         """Переворачиваем дату покупки в ISO формат для сохранения в БД."""
         if not v or v == "None" or v == "":
             return None

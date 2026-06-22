@@ -132,6 +132,37 @@
                 </a>
             </div>
 
+            {% if note.time_logs %}
+                <div style="margin-top: 50px;">
+                    <h3 style="font-size: 1rem; font-weight: 800; text-transform: uppercase; color: #94a3b8; letter-spacing: 1px; margin-bottom: 25px; display: flex; align-items: center; gap: 10px;">
+                        <span style="width: 24px; height: 2px; background: #e2e8f0;"></span> Хронология дня
+                    </h3>
+
+                    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 15px;">
+                        {% for log in note.time_logs %}
+                        <div style="background: white; border: 1px solid #f1f5f9; padding: 18px; border-radius: 20px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 8px rgba(0,0,0,0.02); transition: 0.2s;" onmouseover="this.style.borderColor='var(--primary)'" onmouseout="this.style.borderColor='#f1f5f9'">
+                            <div style="overflow: hidden;">
+                                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                                    <span style="font-size: 0.6rem; font-weight: 900; text-transform: uppercase; background: #f1f5f9; padding: 2px 6px; border-radius: 5px; color: #64748b;">
+                                        {{ log.service }}
+                                    </span>
+                                    <span style="font-size: 0.6rem; font-weight: 800; color: {% if log.category_tag == 'work' %}#3b82f6{% else %}#db2777{% endif %}; text-transform: uppercase;">
+                                        #{{ log.category_tag }}
+                                    </span>
+                                </div>
+                                <div style="font-size: 1rem; font-weight: 700; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{{ log.subject }}">
+                                    {{ log.subject }}
+                                </div>
+                            </div>
+                            <div style="font-size: 1.1rem; font-weight: 900; color: #1e293b; padding-left: 15px; flex-shrink: 0;">
+                                {{ log.raw_duration }}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            {% endif %}
+
         </div>
     </div>
 </div>

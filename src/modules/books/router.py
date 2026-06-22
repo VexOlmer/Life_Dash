@@ -206,7 +206,6 @@ async def sync_books_endpoint(
     force: bool = False
 ) -> HTMLResponse:
     """Запускает синхронизацию книг."""
-    print("--- DEBUG: Кнопка синхронизации КНИГ нажата ---")
     stats = sync_books(session, force=force)
     return templates.TemplateResponse(
         "components/sync_report.html", 

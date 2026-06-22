@@ -7,7 +7,11 @@ from typing import Any
 from pydantic import ConfigDict, field_validator
 from sqlmodel import Field, SQLModel
 
-from src.common.utils import translate
+from src.common.utils import (
+    format_minutes_to_pretty,
+    parse_duration_to_minutes,
+    translate,
+)
 from src.core.logger import logger
 
 
@@ -113,59 +117,6 @@ class Book(SQLModel, table=True):
                 if len(sub_list) > 2:
                     raise ValueError(f"В жанре '{block}' не может быть более 2-х поджанров")
         return v
-
-
-    # --- Доп функции ---
-    @staticmethod
-    def _time_to_minutes(time_str: str) -> int:
-        """
-            Конвертирует '12:30' или '45' в минуты (целое число).
-            
-            Args:
-                time_str: Общее время в часах или минутах.
-                
-            Returns:
-                int: Общее время в минутах
-        """
-        
-        time_str = str(time_str).strip()
-        if ":" in time_str:
-            try:
-                parts = time_str.split(":")
-                # Если формат ЧЧ:ММ (например, 12:30)
-                if len(parts) == 2:
-                    return int(parts[0]) * 60 + int(parts[1])
-                # Если формат ЧЧ:ММ:СС (на всякий случай)
-                elif len(parts) == 3:
-                    return int(parts[0]) * 60 + int(parts[1])
-            except (ValueError, IndexError):
-                return 0
-        # Если введено просто число (например, "45"), считаем это минутами
-        return int(time_str) if time_str.isdigit() else 0
-
-    @staticmethod
-    def _minutes_to_pretty(minutes: int) -> str:
-        """
-            Конвертирует минуты в часых с минутами/только минуты.
-
-            Args:
-                minutes: Общее кол-во минут.
-            
-            Returns:
-                str: Минуты или Часы с минутами.
-        """
-        
-        if minutes <= 0:
-            return "0м"
-        if minutes < 60:
-            return f"{minutes}м"
-        
-        h = minutes // 60 # Целое количество часов
-        m = minutes % 60  # Остаток минут
-        
-        if m == 0:
-            return f"{h}ч"
-        return f"{h}ч {m}м"
 
 
     # --- Свойства жанров ---
@@ -367,8 +318,8 @@ class Book(SQLModel, table=True):
 
                 # --- Определение типа контента и обработка объема ---
                 if s_format == "audio" or ":" in raw_vol:
-                    vol_val = self._time_to_minutes(raw_vol)
-                    disp_vol = self._minutes_to_pretty(vol_val)
+                    vol_val = parse_duration_to_minutes(raw_vol)
+                    disp_vol = format_minutes_to_pretty(vol_val)
                     s_type = "audio"
                 else:
                     vol_val = int(raw_vol) if str(raw_vol).isdigit() else 0
@@ -422,7 +373,7 @@ class Book(SQLModel, table=True):
                             pace_val = round(vol_val / delta, 1)
                             # Форматируем темп в зависимости от типа
                             if s_type == "audio":
-                                session["pace"] = f"{self._minutes_to_pretty(int(pace_val))}/дн"
+                                session["pace"] = f"{format_minutes_to_pretty(int(pace_val))}/дн"
                             else:
                                 session["pace"] = f"{pace_val} стр/дн"
                     except ValueError as e:

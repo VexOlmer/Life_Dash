@@ -1,0 +1,51 @@
+{% extends "layout.html" %}
+{% block content %}
+<div style="max-width: 1200px; margin: 0 auto;">
+    <h1 style="font-size: 3rem; font-weight: 800; letter-spacing: -2px; margin-bottom: 2rem;">Аналитика времени <small style="font-size: 1rem; color: #94a3b8;">(30 дней)</small></h1>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px;">
+        <!-- График 1: Категории -->
+        <div style="background: white; padding: 30px; border-radius: 24px; border: 1px solid #eee;">
+            <h3 style="text-transform: uppercase; font-size: 0.7rem; letter-spacing: 1px; color: #94a3b8; margin-bottom: 20px;">По категориям</h3>
+            <canvas id="categoryChart"></canvas>
+        </div>
+
+        <!-- График 2: Сервисы -->
+        <div style="background: white; padding: 30px; border-radius: 24px; border: 1px solid #eee;">
+            <h3 style="text-transform: uppercase; font-size: 0.7rem; letter-spacing: 1px; color: #94a3b8; margin-bottom: 20px;">По инструментам</h3>
+            <canvas id="serviceChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    const stats = {{ stats | tojson }};
+    
+    // Категории
+    new Chart(document.getElementById('categoryChart'), {
+        type: 'doughnut',
+        data: {
+            labels: Object.keys(stats.categories),
+            datasets: [{
+                data: Object.values(stats.categories).map(m => (m/60).toFixed(1)),
+                backgroundColor: ['#6366f1', '#ec4899', '#f59e0b', '#10b981', '#3b82f6']
+            }]
+        },
+        options: { plugins: { legend: { position: 'bottom' } } }
+    });
+
+    // Сервисы
+    new Chart(document.getElementById('serviceChart'), {
+        type: 'pie',
+        data: {
+            labels: Object.keys(stats.services),
+            datasets: [{
+                data: Object.values(stats.services).map(m => (m/60).toFixed(1)),
+                backgroundColor: ['#1e293b', '#475569', '#64748b', '#94a3b8', '#cbd5e1']
+            }]
+        },
+        options: { plugins: { legend: { position: 'bottom' } } }
+    });
+</script>
+{% endblock %}

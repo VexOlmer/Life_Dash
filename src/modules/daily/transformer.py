@@ -6,29 +6,19 @@ from pathlib import Path
 
 import frontmatter
 
+from src.common.utils import parse_duration_to_minutes
 from src.core.exceptions import ValidationError
 from src.core.logger import logger
+from src.modules.time.transformer import TimeTransformer
 
-from .models import DailyNote, TimeLog
+from .models import DailyNote
 
 
 class DailyTransformer:
     """Трансформер для обработки расширенного YAML ежедневных заметок."""
-    
-    @staticmethod
-    def _parse_duration(dur_str: str) -> int:
-        """Конвертирует '1h 20m', '2h' или '45m' в минуты."""
-        total = 0
-        h_match = re.search(r'(\d+)h', dur_str)
-        m_match = re.search(r'(\d+)m', dur_str)
-        if h_match:
-            total += int(h_match.group(1)) * 60
-        if m_match:
-            total += int(m_match.group(1))
-        return total
 
     @staticmethod
-    def transform(file_path: Path, vault_path: Path, mtime: float) -> tuple[DailyNote, list[TimeLog]]:
+    def transform(file_path: Path, vault_path: Path, mtime: float) -> DailyNote:
         """
             Превращает Markdown файл в объект DailyNote и список временных логов.
             
@@ -50,7 +40,7 @@ class DailyTransformer:
                 mtime: Время последнего обновления.
             
             Returns:
-                tuple[DailyNote, list[TimeLog]]: Связка объекта ежедневной заметки с временными логами.
+                DailyNote: Объект ежедневной заметки.
         """
         
         content = file_path.read_text(encoding="utf-8")
@@ -64,13 +54,11 @@ class DailyTransformer:
             date_obj = datetime.strptime(file_path.stem, "%d-%m-%Y")
             db_date_str = date_obj.strftime("%Y-%m-%d")
         except ValueError as e:
-            logger.error(f"Имя файла должно быть в формате DD-MM-YYYY: {filename}. Ошибка - {e}.")
             raise ValidationError(f"Имя файла должно быть в формате DD-MM-YYYY: {filename}.") from e
         
         # 2. Город
         city = meta.get("city")
         if not city or city == "Unknown":
-            logger.error(f"[{filename}] Поле 'city' в YAML не заполнено")
             raise ValidationError(f"[{filename}] Поле 'city' в YAML не заполнено")
 
         # 3. Сон
@@ -81,13 +69,11 @@ class DailyTransformer:
             t = re.search(r"-.*Встал:\s*(\d{2}:\d{2})\s*$", content, re.M)
             
             if not (f and t):
-                logger.error(f"[{file_path.name}] Поля 'Лег' и 'Встал' обязательны в блоке Сна.")
                 raise ValidationError(f"[{file_path.name}] Поля 'Лег' и 'Встал' обязательны в блоке Сна.")
             
             sleep_from, sleep_to = f.group(1).strip(), t.group(1).strip()
             
             if sleep_from in ["—", "-", ":"] or sleep_to in ["—", "-", ":"]:
-                logger.error(f"[{filename}] Поля Сна не заполнены или имеют неверный формат")
                 raise ValidationError(f"[{filename}] Поля Сна не заполнены или имеют неверный формат")
             
             # Ищем саму строку "Дневной сон"
@@ -97,10 +83,9 @@ class DailyTransformer:
                 val = nap_line_match.group(1).strip()
                 # Если строка есть, проверяем наличие хотя бы одной цифры
                 if any(char.isdigit() for char in val):
-                    nap_mins = DailyTransformer._parse_duration(val)
+                    nap_mins = parse_duration_to_minutes(val)
                 else:
                     # Строка есть, но цифр нет (например, "- Дневной сон: h m" или "- Дневной сон: ")
-                    logger.error(f"[{file_path.name}] Поле 'Дневной сон' присутствует, но не заполнено значениями. Строка - {val}.")
                     raise ValidationError(f"[{file_path.name}] Поле 'Дневной сон' присутствует, но не заполнено значениями. Строка - {val}.")
             else:
                 # Самой строки нет — это нормально, пишем 0
@@ -113,7 +98,6 @@ class DailyTransformer:
             a_s = re.search(r"^-\s*.*Дополнительный сахар:\s*(.+)$", content, re.M)
             
             if not m_w or not a_s:
-                logger.error(f"[{file_path.name}] Отсутствуют поля в Дневнике самоконтроля")
                 raise ValidationError(f"[{file_path.name}] Отсутствуют поля в Дневнике самоконтроля")
             
             morning_workout = m_w.group(1).strip()
@@ -121,11 +105,6 @@ class DailyTransformer:
             
             valid_values = {"Да", "Нет"}
             if morning_workout not in valid_values or added_sugar not in valid_values:
-                logger.error(
-                    f"[{file_path.name}] Поля в Дневнике самоконтроля содержат "
-                    f"недопустимые значения: Утренняя разминка='{morning_workout}', "
-                    f"Дополнительный сахар='{added_sugar}'. Допустимы только 'Да' или 'Нет'."
-                )
                 raise ValidationError(
                     f"[{file_path.name}] Поля в Дневнике самоконтроля содержат "
                     f"недопустимые значения: Утренняя разминка='{morning_workout}', "
@@ -142,7 +121,6 @@ class DailyTransformer:
             vis = re.search(r"- Уровень висцерального жира:\s*([\d.]+)\s*$", content, re.M)
             
             if not (w and bmi and fat and mus and vis):
-                logger.error(f"[{file_path.name}] Все 5 личных показателей должны быть заполнены.")
                 raise ValidationError(f"[{file_path.name}] Все 5 личных показателей должны быть заполнены.")
             
             metrics = {
@@ -174,7 +152,6 @@ class DailyTransformer:
             
             # Если строки найдены, они обязаны быть числами
             if not s_raw or not c_raw:
-                logger.error(f"[{file_path.name}] Поля активности не могут быть пустыми, если блок присутствует.")
                 raise ValidationError(f"[{file_path.name}] Поля активности не могут быть пустыми, если блок присутствует.")
             
             try:
@@ -225,6 +202,10 @@ class DailyTransformer:
             
             if len(clean_text) > 5:
                 has_content = True
+                
+        # 7. Временные логи
+        time_logs = TimeTransformer.extract_logs(content, db_date_str)
+        logger.info(f"Найдено {len(time_logs)} временных логов в заметке.")
 
         note = DailyNote(
             date=db_date_str,
@@ -251,39 +232,10 @@ class DailyTransformer:
             
             has_content=has_content,
             
-            file_path=str(file_path.relative_to(vault_path)),
-            last_modified=mtime
+            file_path=file_path.relative_to(vault_path).as_posix(),
+            last_modified=mtime,
+            
+            time_logs=time_logs
         )
-
-        # 5. Парсинг Времени
-        logs = []
-        # time_section = re.search(r"(?m)^##.*Время\n(.*?)(?=\n---|##|$)", content, re.DOTALL)
-        # if time_section:
-        #     lines = time_section.group(1).strip().split("\n")
-        #     for line in lines:
-        #         # Regex под формат: - Сервис (Уточнение | Тип) - Время
-        #         match = re.match(r"-\s*(.*?)\s*\((.*?)(?:\s*\|\s*(.*?))?\)\s*-\s*(.*)", line.strip())
-        #         if match:
-        #             srv, sub, tag, dur = match.groups()
-        #             logs.append(TimeLog(
-        #                 service=srv.strip(),
-        #                 subject=sub.strip(),
-        #                 category_tag=tag.strip() if tag else None,
-        #                 raw_duration=dur.strip(),
-        #                 duration_minutes=DailyTransformer._parse_duration(dur),
-        #                 daily_id=db_date_str
-        #             ))
-        #         else:
-        #             # Упрощенный вариант без тега: - Работа (Ростелеком) - 5h
-        #             match_simple = re.match(r"-\s*(.*?)\s*\((.*?)\)\s*-\s*(.*)", line.strip())
-        #             if match_simple:
-        #                 srv, sub, dur = match_simple.groups()
-        #                 logs.append(TimeLog(
-        #                     service=srv.strip(),
-        #                     subject=sub.strip(),
-        #                     raw_duration=dur.strip(),
-        #                     duration_minutes=DailyTransformer._parse_duration(dur),
-        #                     daily_id=db_date_str
-        #                 ))
         
-        return note, logs
+        return note

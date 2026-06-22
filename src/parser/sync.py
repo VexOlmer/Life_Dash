@@ -80,9 +80,9 @@ def _base_sync(
     today_str = datetime.now().strftime("%d-%m-%Y")
     
     for f_path, mtime in files:
-        rel_path = str(f_path.relative_to(vault_path))
+        rel_path = f_path.relative_to(vault_path).as_posix() 
         
-        # Пропуск текущего дня только для Daily
+        # Пропуск текущего дня для DailyNotes
         if is_daily and f_path.stem == today_str:
             continue
 
@@ -93,16 +93,8 @@ def _base_sync(
                 continue
 
             logger.info(f"Обработка: {rel_path}")
-            
-            # Разница в трансформации и сохранении
-            if is_daily:
-                # Daily возвращает кортеж (note, logs) и требует upsert_daily
-                note_obj, logs_list = transformer.transform(f_path, vault_path, mtime)
-                repository.upsert_daily(note_obj, logs_list)
-            else:
-                # Остальные возвращают объект и требуют обычный upsert
-                model_obj = transformer.transform(f_path, vault_path, mtime)
-                repository.upsert(model_obj)
+            model_obj = transformer.transform(f_path, vault_path, mtime)
+            repository.upsert(model_obj)
             
             stats["updated"] += 1
 

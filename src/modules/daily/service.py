@@ -5,6 +5,7 @@ from datetime import date, datetime, timedelta
 
 from sqlmodel import Session, select
 
+from src.common.utils import format_date_ru
 from src.core.config import settings
 from src.core.logger import logger
 
@@ -13,14 +14,6 @@ from .models import DailyNote
 
 class DailyService:
     """Класс обработки ежедневных заметок для информативного показа на дашборде сайта."""
-    
-    @staticmethod
-    def _format_date_ru(date_iso: str) -> str:
-        """Превращает YYYY-MM-DD в DD.MM.YYYY для отображения."""
-        if not date_iso or len(date_iso) < 10:
-            return "-"
-        y, m, d = date_iso.split("-")
-        return f"{d}.{m}.{y}"
     
     @staticmethod
     def get_week_data(session: Session, week_number: int, year: int) -> dict[str: str | datetime]:
@@ -334,7 +327,7 @@ class DailyService:
                 return {"val": "-", "display_date": "-", "iso_date": None}
             return {
                 "val": getattr(note, attr_pretty),
-                "display_date": DailyService._format_date_ru(note.date),
+                "display_date": format_date_ru(note.date),
                 "iso_date": note.date # Для ссылки
             }
 
@@ -368,8 +361,8 @@ class DailyService:
                     current_count += 1
                 else:
                     # Состояние изменилось -> формируем красивый диапазон
-                    d1 = DailyService._format_date_ru(period_start_date)
-                    d2 = DailyService._format_date_ru(notes[i-1].date)
+                    d1 = format_date_ru(period_start_date)
+                    d2 = format_date_ru(notes[i-1].date)
                     p_str = f"{d1} — {d2}"
                     if current_state:
                         pos_periods.append((current_count, p_str))
@@ -379,8 +372,8 @@ class DailyService:
                     
             # Добавляем последний период
             if current_count > 0:
-                d1 = DailyService._format_date_ru(period_start_date)
-                d2 = DailyService._format_date_ru(notes[-1].date)
+                d1 = format_date_ru(period_start_date)
+                d2 = format_date_ru(notes[-1].date)
                 p_str = f"{d1} — {d2}"
                 if current_state:
                     pos_periods.append((current_count, p_str))
@@ -425,7 +418,7 @@ class DailyService:
                 return {"val": "-", "display_date": "-", "iso_date": None}
             return {
                 "val": f"{note.weight} кг",
-                "display_date": DailyService._format_date_ru(note.date),
+                "display_date": format_date_ru(note.date),
                 "iso_date": note.date
             }
         
@@ -442,7 +435,7 @@ class DailyService:
             """Вспомогательная функция для сборки словаря рекордов Шагов и Калорий."""
             return {
                 "val": f"{getattr(note, attr):,} {unit}".replace(",", " "),
-                "display_date": DailyService._format_date_ru(note.date),
+                "display_date": format_date_ru(note.date),
                 "iso_date": note.date
             }
 

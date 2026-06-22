@@ -4,20 +4,9 @@ from datetime import datetime, timedelta
 
 from sqlmodel import Field, Relationship, SQLModel
 
+from src.common.utils import format_minutes_to_pretty
+from src.modules.time.models import TimeLog
 
-class TimeLog(SQLModel, table=True):
-    """Строки активности из раздела Время."""    
-    id: int | None = Field(default=None, primary_key=True)
-    
-    service: str  # Steam, Youtube, Работа, Разное
-    subject: str  # Red Dead Redemption 2, Ростелеком, Властелин колец
-    category_tag: str | None = None  # g, f, s, ch
-    
-    duration_minutes: int  # Общего кол-во минут
-    raw_duration: str  # Сырая строка времени "1h 2m"
-    
-    daily_id: str = Field(foreign_key="dailynote.date")
-    daily_note: "DailyNote" = Relationship(back_populates="time_logs")
 
 class DailyNote(SQLModel, table=True):
     """Ежедневная заметка с показателями здоровья и сна."""
@@ -60,11 +49,6 @@ class DailyNote(SQLModel, table=True):
         back_populates="daily_note", 
         sa_relationship_kwargs={"cascade": "all, delete-orphan"}
     )
-
-    @property
-    def total_work_minutes(self) -> int:
-        """Общее время работы."""
-        return sum(log.duration_minutes for log in self.time_logs if log.service == "Работа")
     
     @property
     def night_sleep_minutes(self) -> int:
@@ -92,20 +76,27 @@ class DailyNote(SQLModel, table=True):
         except ValueError:
             return 0
 
-    def _format_mins(self, total_mins: int) -> str:
-        """Вспомогательный метод для форматирования."""
-        if total_mins <= 0:
-            return "-"
-        h = total_mins // 60
-        m = total_mins % 60
-        return f"{h}ч {m}м" if h > 0 else f"{m}м"
-
     @property
     def night_sleep_pretty(self) -> str:
         """Преобразование времени основного сна."""
-        return self._format_mins(self.night_sleep_minutes)
+        return format_minutes_to_pretty(self.night_sleep_minutes)
 
     @property
     def nap_pretty(self) -> str:
         """Преобразование времени дневного сна."""
-        return self._format_mins(self.nap_mins)
+        return format_minutes_to_pretty(self.nap_mins)
+    
+    @property
+    def time_stats_by_category(self) -> dict:
+        """Группирует время по тэгам для краткого вывода."""
+        stats = {}
+        for log in self.time_logs:
+            tag = log.category_tag.lower()
+            stats[tag] = stats.get(tag, 0) + log.duration_minutes
+        return stats
+
+    @property
+    def work_time_total(self) -> str:
+        """Общее время на работе."""
+        mins = self.time_stats_by_category.get("work", 0)
+        return format_minutes_to_pretty(mins)
