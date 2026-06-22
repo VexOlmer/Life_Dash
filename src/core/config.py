@@ -47,6 +47,22 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
     )
+    
+    # Группировка тегов временных логов
+    TIME_CATEGORIES: dict[str, list[str]] = {
+        "Развитие": ["study", "programming", "science", "language", "reading"],
+        "Досуг": ["gaming", "movie", "series", "channel", "social"],
+        "Работа": ["work", "project"],
+        "Жизнь": ["sport", "routine", "hobby", "health"]
+    }
+
+    # Недельние бюджеты времени
+    TIME_BUDGETS: dict[str, int] = {
+        "Развитие": 15,    # ~2 часа в день
+        "Досуг": 10,       # лимит
+        "Работа": 40,      # стандарт
+        "Жизнь": 12        # спорт, быт
+    }
 
 
 settings = Settings()
