@@ -32,6 +32,7 @@ pyyaml = "^6.0.2"
 loguru = "^0.7.2"
 typer = {extras = ["all"], version = "^0.15.1"}     # Для работы CLI
 alembic = "^1.18.4"
+openpyxl = "^3.1.5"
 
 [tool.poetry.group.dev.dependencies]
 # Ruff заменяет flake8, isort и black

@@ -7,6 +7,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlmodel import Session, func, select
 
+from src.common.export import ExportService
 from src.core.cache import stats_cache
 from src.core.database import get_session
 from src.core.logger import logger
@@ -65,6 +66,21 @@ async def index(request: Request, session: SessionDep) -> HTMLResponse:
     return templates.TemplateResponse(
         "pages/index.html", {"request": request, "stats": new_stats}
     )
+
+@router.get("/export/excel")
+async def export_data(request: Request, session: SessionDep) -> HTMLResponse:
+    """Формирование Excel документа по модулям Игр, Книг, Фильмов/Сериалов."""
+    try:
+        saved_path = ExportService.export_all_data(session)
+        return HTMLResponse(content=f"""
+            <script>
+                alert("Файл успешно сохранен в Загрузки:\\n{saved_path.name}");
+                window.location.href = "/";
+            </script>
+        """)
+    except Exception as e:
+        logger.error(f"Ошибка экспорта: {e}")
+        return HTMLResponse(content="<script>alert('Ошибка при создании файла'); window.history.back();</script>")
     
 @router.get("/money/", response_class=HTMLResponse)
 @router.get("/sport/", response_class=HTMLResponse)
