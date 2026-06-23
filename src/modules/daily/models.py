@@ -83,7 +83,7 @@ class DailyNote(SQLModel, table=True):
     @property
     def time_stats_by_category(self) -> dict:
         """Группирует время по тэгам для краткого вывода."""
-        stats = {}
+        stats: dict[str, int] = {}
         for log in self.time_logs:
             tag = log.category_tag.lower()
             stats[tag] = stats.get(tag, 0) + log.duration_minutes

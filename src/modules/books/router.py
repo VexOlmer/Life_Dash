@@ -57,15 +57,15 @@ async def list_books(
     # --- 1. Собираем все активные фильтры ---
     conditions = []
     if q:
-        conditions.append(or_(Book.title.icontains(q), Book.author.icontains(q), Book.series.icontains(q)))
+        conditions.append(or_(Book.title.icontains(q), Book.author.icontains(q), Book.series.icontains(q))) # type: ignore
     if status:
-        conditions.append(Book.status == status)
+        conditions.append(Book.status == status) # type: ignore
     if country:
-        conditions.append(Book.country_author == country)
+        conditions.append(Book.country_author == country) # type: ignore
     if genre:
-        conditions.append(Book.genres.icontains(genre))
+        conditions.append(Book.genres.icontains(genre)) # type: ignore
     if book_format:
-        conditions.append(Book.read_log.icontains(book_format))
+        conditions.append(Book.read_log.icontains(book_format)) # type: ignore
 
     # --- 2. Создаем базовый запрос для ТЕКУЩИХ отфильтрованных книг ---
     # Мы будем использовать этот запрос как основу для всех выпадающих списков
@@ -110,6 +110,9 @@ async def list_books(
     
     unique_formats = set()
     for log in logs_raw:
+        if not log:
+            continue
+        
         for entry in log.split(" || "):
             parts = entry.split("|")
             if len(parts) >= 3:

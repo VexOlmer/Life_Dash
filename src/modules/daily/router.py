@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlmodel import Session, select
@@ -150,14 +150,14 @@ async def daily_records(request: Request, session: SessionDep) -> HTMLResponse:
     )
 
 @router.get("/{date_str}", response_class=HTMLResponse)
-async def daily_detail(request: Request, date_str: str, session: SessionDep) -> HTMLResponse:
+async def daily_detail(request: Request, date_str: str, session: SessionDep) -> Response:
     """Детальная страница дня."""
     note = session.get(DailyNote, date_str)
     if not note:
         # Если заметка не найдена в БД, перенаправляет назад
         return RedirectResponse(url="/daily/")
 
-    # Получаем текстовый контент через сервис
+    # Получаем доп поля из заметки (Мысли)
     content = DailyService.get_daily_content(note.file_path)
 
     return templates.TemplateResponse(

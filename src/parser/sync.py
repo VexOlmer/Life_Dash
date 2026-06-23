@@ -58,9 +58,9 @@ def _base_sync(
     scanner = ScannerEngine()
     files = scanner.scan_folder(folder_path)
     
-    # 1. Сверка путей и удаление лишних (то, что было в книгах/играх)
+    # --- 1. Сверка путей и удаление лишних ---
     db_paths = set(repository.get_all_paths())
-    current_files_rel = {str(f[0].relative_to(vault_path)) for f in files}
+    current_files_rel = {f[0].relative_to(vault_path).as_posix() for f in files}
     
     deleted_count = 0
     paths_to_delete = db_paths - current_files_rel
@@ -77,7 +77,7 @@ def _base_sync(
         "error_details": []
     }
 
-    # 2. Основной цикл обработки
+    # --- 2. Основной цикл обработки ---
     today_str = datetime.now().strftime("%d-%m-%Y")
     
     for f_path, mtime in files:
@@ -88,7 +88,7 @@ def _base_sync(
             continue
 
         try:
-            # Проверка mtime
+            # Проверка mtime и определение наличия изменений с последней обработки
             db_item = repository.get_by_path(rel_path)
             if not force and db_item and db_item.last_modified >= mtime:
                 continue

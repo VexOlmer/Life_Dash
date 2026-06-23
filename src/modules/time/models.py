@@ -21,5 +21,5 @@ class TimeLog(SQLModel, table=True):
     # Внешний ключ на дату из ежедневной заметки
     daily_id: str = Field(foreign_key="dailynote.date", index=True)
     
-    # Исправлено: back_populates должен указывать на имя поля в DailyNote
+    # Связь с записью из таблицы DailyNote
     daily_note: "DailyNote" = Relationship(back_populates="time_logs")

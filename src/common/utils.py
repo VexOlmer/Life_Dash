@@ -45,6 +45,7 @@ TRANSLATIONS: dict[str, str] = {
     "comedy": "Комедия",
     "animation": "Анимация",
     "sitcom": "Ситком",
+    "co-op": "Кооператив",
 
     # --- Поджанры (универсально для всех категорий) ---
     
@@ -166,7 +167,7 @@ def parse_duration_to_minutes(dur_str: str | None) -> int:
     total = 0
     dur_str = str(dur_str).lower().strip()
 
-    # 1. Проверка формата ЧЧ:ММ
+    # --- 1. Проверка формата ЧЧ:ММ ---
     if ":" in dur_str:
         try:
             parts = dur_str.split(":")
@@ -175,7 +176,7 @@ def parse_duration_to_minutes(dur_str: str | None) -> int:
         except ValueError as e:
             raise ValueError(f"Ошибка обработки строки временной затраты. Ошибка - {e}") from e
 
-    # 2. Проверка форматов h и m (1h 20m)
+    # --- 2. Определение части с часами и минутами (1h 20m) ---
     h_match = re.search(r'(\d+)\s*h', dur_str)
     m_match = re.search(r'(\d+)\s*m', dur_str)
     
@@ -184,7 +185,7 @@ def parse_duration_to_minutes(dur_str: str | None) -> int:
     if m_match:
         total += int(m_match.group(1))
 
-    # 3. Если просто число ("45"), считаем за минуты
+    # --- 3. Если просто число ("45"), считаем за минуты ---
     if not h_match and not m_match and dur_str.isdigit():
         total = int(dur_str)
 

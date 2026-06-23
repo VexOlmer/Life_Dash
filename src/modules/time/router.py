@@ -30,11 +30,10 @@ async def time_index(
     m = month or now.month
     y = year or now.year
     
-    # 1. Месячная аналитика (графики, список)
+    # --- 1. Месячная аналитика (графики, список) ---
     monthly_stats = TimeService.get_monthly_stats(session, y, m)
     
-    # 2. Недельный прогресс (бюджеты)
-    # Примечание: бюджеты всегда показывают ТЕКУЩУЮ неделю для оперативного контроля
+    # --- 2. Недельный прогресс (бюджеты) ---
     weekly_budgets = TimeService.get_weekly_budget_stats(session)
     
     return templates.TemplateResponse("pages/time/index.html", {

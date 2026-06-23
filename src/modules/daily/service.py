@@ -15,7 +15,7 @@ class DailyService:
     """Класс обработки ежедневных заметок для информативного показа на дашборде сайта."""
     
     @staticmethod
-    def get_week_data(session: Session, week_number: int, year: int) -> dict[str: str | datetime]:
+    def get_week_data(session: Session, week_number: int, year: int) -> dict[str]:
         """
             Получает все записи за конкретную ISO-неделю.
             
@@ -25,7 +25,7 @@ class DailyService:
                 year: номер года.
             
             Returns:
-                dict[str: str | datetime]: данные недели в формате для отображения в html.
+                dict[str]: данные недели в формате для отображения в html.
         """
         
         # Список дат в ISO-формате
@@ -49,7 +49,7 @@ class DailyService:
         return week_days
 
     @staticmethod
-    def get_aggregated_stats(session: Session, weeks_data: list) -> dict[str: int]:
+    def get_aggregated_stats(session: Session, weeks_data: list) -> dict[str]:
         """
             Считает средние и суммарные показатели за 14 дней.
             
@@ -58,7 +58,7 @@ class DailyService:
                 weeks_data: список данных за 2 недели.
             
             Returns:
-                dict[str: int]: рассчитанные значения показателей за 2 недели.
+                dict[str]: рассчитанные значения показателей за 2 недели.
         """
         
         all_notes = [d["note"] for d in weeks_data if d["note"]]
@@ -205,7 +205,6 @@ class DailyService:
         for d in weeks_data:
             note = d["note"]
             if note:
-                # ... существующие append ...
                 steps.append(note.steps)
                 calories.append(note.calories)
             else:
@@ -237,7 +236,7 @@ class DailyService:
         }
         
     @staticmethod
-    def get_daily_content(relative_path: str) -> dict[str, str]:
+    def get_daily_content(relative_path: str) -> dict[str]:
         """
             Парсит файл дня и извлекает мысли.
             
@@ -245,7 +244,7 @@ class DailyService:
                 relative_path: Относительный путь до файла ежедневной заметки.
             
             Returns:
-                dict[str, str]: Доп разделы для вывода на странице ежедневной заметки.
+                dict[str]: Доп разделы для вывода на странице ежедневной заметки.
         """
 
         full_path = settings.OBSIDIAN_VAULT_PATH / relative_path
@@ -260,7 +259,7 @@ class DailyService:
         
     
     @staticmethod
-    def get_records(session: Session) -> dict[str: str]:
+    def get_records(session: Session) -> dict[str]:
         """
             Рассчет различных рекордов и средних показателей по всем ежедневным заметкам.
             
@@ -268,14 +267,14 @@ class DailyService:
                 session: Текущая сессия БД.
             
             Returns:
-                dict[str: str]: Различные рекордные показатели.
+                dict[str]: Различные рекордные показатели.
         """
         
         notes = session.exec(select(DailyNote).order_by(DailyNote.date)).all()
         if not notes:
             return {}
 
-        # --- 1. РАСЧЕТ СРЕДНЕГО ВРЕМЕНИ (Сон) ---
+        # --- 1. Расчет среднего времени (Сон) ---
         def time_to_min(t_str: str) -> int:
             """Корректный перевод времени в минуты."""
             if not t_str or ":" not in t_str:
@@ -301,7 +300,7 @@ class DailyService:
         avg_wakeuptime = min_to_time(sum(sleep_to_mins)/len(sleep_to_mins)) if sleep_to_mins else "--:--"
         logger.debug(f"Среднее время засыпания - {avg_bedtime}.\nСреднее время подъема - {avg_wakeuptime}")
 
-        # --- 2. РЕКОРДЫ СНА ---
+        # --- 2. Рекорды сна ---
         sleep_notes = [n for n in notes if n.night_sleep_minutes > 0]
         
         # Классы DailyNote с определенным значением после фильтрации
@@ -309,7 +308,7 @@ class DailyService:
         min_sn = min(sleep_notes, key=lambda n: n.night_sleep_minutes) if sleep_notes else None
         max_nn = max([n for n in notes if n.nap_mins > 0], key=lambda n: n.nap_mins, default=None)
         
-        def build_sleep_record(note: DailyNote, attr_pretty: str) -> dict[str: str]:
+        def build_sleep_record(note: DailyNote, attr_pretty: str) -> dict[str]:
             """Вспомогательная функция для сборки словаря рекорда сна."""
             if not note:
                 return {"val": "-", "display_date": "-", "iso_date": None}
@@ -319,8 +318,8 @@ class DailyService:
                 "iso_date": note.date # Для ссылки
             }
 
-        # --- 3. СЕРИИ И ИХ СРЕДНИЕ ЗНАЧЕНИЯ ---
-        def calc_detailed_streaks(attr_name: str, positive_val: str) -> dict[str: int]:
+        # --- 3. Серии (разминка и доп сахар) и их средние значения ---
+        def calc_detailed_streaks(attr_name: str, positive_val: str) -> dict[str]:
             """
                 Рассчет положительных и отрицительных серий из Дневника самоконтроля.
                 
@@ -329,7 +328,7 @@ class DailyService:
                     positive_val: флаг положительной записи.
                 
                 Returns:
-                    dict[str: int]: максимальный/минимальный период + и - записи и значения их средней продолжительности.
+                    dict[str]: максимальный/минимальный период + и - записи и значения их средней продолжительности.
             """
             
             # Списки с длинами своих периодов
@@ -368,7 +367,7 @@ class DailyService:
                 else:
                     neg_periods.append((current_count, p_str))
 
-            def get_max_info(periods: list[list]) -> dict[str: str]:
+            def get_max_info(periods: list[list]) -> dict[str]:
                 """Получение максимально длительного периода из списка."""
                 if not periods:
                     return {"val": 0, "range": "-"}
@@ -394,13 +393,13 @@ class DailyService:
                 "avg_neg": round(sum(p[0] for p in neg_periods)/len(neg_periods), 1) if neg_periods else 0
             }
         
-        # --- 4. РЕКОРДЫ ВЕСА ---
+        # --- 4. Рекорды веса ---
         # Берем только дни, где вес указан и больше 0
         weight_notes = [n for n in notes if n.weight and n.weight > 0]
         max_w = max(weight_notes, key=lambda n: n.weight) if weight_notes else None
         min_w = min(weight_notes, key=lambda n: n.weight) if weight_notes else None
 
-        def build_weight_record(note: DailyNote) -> dict[str: str]:
+        def build_weight_record(note: DailyNote) -> dict[str]:
             """Вспомогательная функция для сборки словаря рекордов веса."""
             if not note:
                 return {"val": "-", "display_date": "-", "iso_date": None}
@@ -419,7 +418,7 @@ class DailyService:
         cal_notes = [n for n in notes if n.calories]
         top_calories = sorted(cal_notes, key=lambda n: n.calories, reverse=True)[:5]
         
-        def build_act_record(note: DailyNote, attr: str, unit: str) -> dict[str: str]:
+        def build_act_record(note: DailyNote, attr: str, unit: str) -> dict[str]:
             """Вспомогательная функция для сборки словаря рекордов Шагов и Калорий."""
             return {
                 "val": f"{getattr(note, attr):,} {unit}".replace(",", " "),

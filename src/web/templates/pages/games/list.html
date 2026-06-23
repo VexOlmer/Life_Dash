@@ -199,7 +199,9 @@
                 <span class="row-title">{{ game.title }}</span>
                 <div style="display: flex; align-items: center; gap: 8px;">
                     <span class="row-author">{{ game.developer }}</span>
-                    {% if game.country and game.country != "Unknown" %}<span style="font-size: 0.65rem; font-weight: 800; background: rgba(0,0,0,0.1); padding: 1px 6px; border-radius: 4px;">{{ game.country }}</span>{% endif %}
+                    <span style="font-size: 0.65rem; font-weight: 800; background: rgba(0,0,0,0.1); padding: 1px 6px; border-radius: 4px;">
+                        {{ game.country_dev }}
+                    </span>
                 </div>
             </div>
 

@@ -20,17 +20,18 @@ class Book(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
 
-    # Основная информация (YAML)
     title: str
     title_orig: str | None = None
+    
     author: str = "Unknown"
     country_author: str = "Unknown"
     year: int
     total: int
-    isbn: str | None = None
+    
     status: str = "finished"
     genres: str
     series: str | None = None
+    
     good_reads: int | None = Field(default=None)
     
     # Формат в БД: "Дата-Дата | Стр | Формат книги | Язык книги | Коммент || Дата-Дата | Стр | Формат книги | Язык книги | Коммент"
@@ -119,7 +120,7 @@ class Book(SQLModel, table=True):
         return v
 
 
-    # --- Свойства жанров ---
+    # --- Обработка жанров и поджанров ---
     @property
     def primary_genres_list(self) -> list[str]:
         """Получение основных жанров."""
@@ -189,11 +190,6 @@ class Book(SQLModel, table=True):
     
     # --- Форматы книг ---
     @property
-    def format_ru(self) -> str:
-        """Локализация формата книги."""
-        return translate(self.format)
-    
-    @property
     def all_formats_list(self) -> list[str]:
         """Возвращает список уникальных форматов из read_log."""
         if not self.read_log:
@@ -224,7 +220,6 @@ class Book(SQLModel, table=True):
     def __init__(self, **data: Any) -> None:  # noqa: ANN401
         """Рассчитываем общий рейтинг по 10 параметрам."""
         
-        # 1. Список полей для расчета
         rating_keys = [
             "rating_characters", "rating_plot", "rating_size", 
             "rating_prose", "rating_ending", "rating_depth", 
@@ -232,17 +227,13 @@ class Book(SQLModel, table=True):
             "rating_expected_real", "rating_recommend"
         ]
         
-        # 2. Считаем сумму из входящего словаря данных
-        # Если каких-то данных нет, берем 0.0
         total = sum(float(data.get(k, 0.0) or 0.0) for k in rating_keys)
-        
-        # 3. Записываем результат в словарь данных, который пойдет в базу
         data["total_rating"] = total
         
-        # 4. Вызываем инициализацию родительского класса (SQLModel)
+        # Вызываем инициализацию родительского класса (SQLModel)
         super().__init__(**data)
         
-        # 5. Принудительно обновляем атрибут после создания (для надежности)
+        # Принудительно обновляем атрибут после создания (для надежности)
         self.total_rating = total
         
     @property
@@ -468,7 +459,6 @@ class Book(SQLModel, table=True):
 
         # 2. Расчет ширины
         title_line = f"BOOK DATA: {self.title}"
-        # Даем запас под длинные пути
         content_width = max(max_key_width + max_val_width + 5, len(title_line), 60)
         
         # 3. Сборка рамки

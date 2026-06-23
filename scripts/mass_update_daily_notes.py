@@ -346,7 +346,7 @@ class DiaryFormatStrategy(UpdateStrategy):
         
         # Заменяем тире на двоеточие в строках вида "- текст - значение"
         # Паттерн ищет: дефис, пробел, текст без двоеточия, пробел, дефис, пробел, значение
-        def replace_tire(match):
+        def replace_tire(match: re.Match) -> str:
             # match.group(1) - текст до дефиса, match.group(2) - значение после дефиса
             return f"- {match.group(1)}: {match.group(2)}"
         

@@ -20,7 +20,6 @@ class BaseRepository(Generic[T]):
     def get_by_path(self, relative_path: str) -> T | None:
         """Находит запись по пути к файлу."""
         
-        # Мы предполагаем, что у всех моделей будет поле file_path
         statement = select(self.model_type).where(
             self.model_type.file_path == relative_path # type: ignore
         )
@@ -54,7 +53,7 @@ class BaseRepository(Generic[T]):
             self.session.delete(instance)
             self.session.commit()
             
-    def get_all_paths(self) -> list[str]:
+    def get_all_paths(self) -> T | None:
         """Возвращает список всех путей файлов, зарегистрированных в БД."""
         statement = select(self.model_type.file_path) # type: ignore
         return self.session.exec(statement).all()

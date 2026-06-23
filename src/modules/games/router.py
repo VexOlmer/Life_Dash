@@ -50,6 +50,7 @@ async def list_games(
             platform: Фильтр по платформе (из логов игры).
             country: Страна компании разработки.
             developer: Разработчик.
+            perfect: Диапазон процента выполнения достижений.
                     
         Returns:
             HTMLResponse: Рендер страницы со списком игр.
@@ -58,31 +59,31 @@ async def list_games(
     # --- 1. Условия фильтрации ---
     conditions = []
     if q:
-        conditions.append(or_(Game.title.icontains(q), Game.developer.icontains(q), Game.series.icontains(q)))
+        conditions.append(or_(Game.title.icontains(q), Game.developer.icontains(q), Game.series.icontains(q))) # type: ignore
     if status:
-        conditions.append(Game.status == status)
+        conditions.append(Game.status == status) # type: ignore
     if genre:
-        conditions.append(Game.genres.icontains(genre))
+        conditions.append(Game.genres.icontains(genre)) # type: ignore
     if platform:
-        conditions.append(Game.play_log.icontains(platform))
+        conditions.append(Game.play_log.icontains(platform)) # type: ignore
     if country:
-        conditions.append(Game.country == country)
+        conditions.append(Game.country_dev == country) # type: ignore
     if developer:
-        conditions.append(Game.developer == developer)
+        conditions.append(Game.developer == developer) # type: ignore
     if perfect:
         if perfect == "100":
-            conditions.append(Game.percent_achievements == 100)
+            conditions.append(Game.percent_achievements == 100) # type: ignore
         elif perfect == "75":
-            conditions.append(Game.percent_achievements >= 75)
-            conditions.append(Game.percent_achievements < 100)
+            conditions.append(Game.percent_achievements >= 75) # type: ignore
+            conditions.append(Game.percent_achievements < 100) # type: ignore
         elif perfect == "50":
-            conditions.append(Game.percent_achievements >= 50)
-            conditions.append(Game.percent_achievements < 75)
+            conditions.append(Game.percent_achievements >= 50) # type: ignore
+            conditions.append(Game.percent_achievements < 75) # type: ignore
         elif perfect == "25":
-            conditions.append(Game.percent_achievements >= 25)
-            conditions.append(Game.percent_achievements < 50)
+            conditions.append(Game.percent_achievements >= 25) # type: ignore
+            conditions.append(Game.percent_achievements < 50) # type: ignore
         elif perfect == "0":
-            conditions.append(Game.percent_achievements < 25)
+            conditions.append(Game.percent_achievements < 25) # type: ignore
 
     # --- 2. Базовый запрос ---
     filtered_stmt = select(Game)
@@ -90,12 +91,12 @@ async def list_games(
         filtered_stmt = filtered_stmt.where(and_(*conditions))
 
     # --- 3. Динамические фильтры (Актуальные значения) ---
-    # Статусы
+    # Статусы завершения игр
     avail_statuses = session.exec(select(Game.status).where(and_(*conditions)).distinct() if conditions else select(Game.status).distinct()).all()
     
-    # Страны
-    avail_countries = session.exec(select(Game.country).where(and_(*conditions)).distinct() if conditions else select(Game.country).distinct()).all()
-
+    # Страны разработчиков
+    avail_countries = session.exec(select(Game.country_dev).where(and_(*conditions)).distinct() if conditions else select(Game.country_dev).distinct()).all()
+    
     # Жанры
     genres_raw = session.exec(select(Game.genres).where(and_(*conditions)).distinct() if conditions else select(Game.genres).distinct()).all()
     unique_genres = set()
@@ -108,6 +109,9 @@ async def list_games(
     logs_raw = session.exec(select(Game.play_log).where(Game.play_log is not None).where(and_(*conditions)) if conditions else select(Game.play_log).where(Game.play_log is not None)).all()
     unique_platforms = set()
     for log in logs_raw:
+        if not log:
+            continue
+        
         for entry in log.split(" || "):
             parts = entry.split("|")
             if len(parts) >= 3:

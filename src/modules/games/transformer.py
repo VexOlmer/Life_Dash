@@ -38,7 +38,22 @@ class GameTransformer:
         
         meta = post.metadata
         
-        # 1. Поиск обложки (files/covers/games/Название_файла.ext)
+        # --- 1. Проверка обязательных полей для шаблона заметки игры ---
+        required_fields = [
+            "title_orig", "year", "status", "genres",
+            "developer", "country_dev", "publisher", "country_pub",
+            "hours_played", "hours_to_beat", "percent_achievements",
+            "play_log", "bg_color", "text_color",
+            "metacritic", "steam", "igdb",
+            "rating_optimization", "rating_graphics", "rating_audio", "rating_gameplay",
+            "rating_price_quality", "rating_story_lore", "rating_immersion", 
+            "rating_replayability", "rating_expected_real", "rating_cult_status"
+        ]
+        missing = [f for f in required_fields if f not in meta or meta.get(f) is None]
+        if missing:
+            raise ValidationError(f"В заметке отсутствуют обязательные поля: {', '.join(missing)}")
+        
+        # --- 2. Поиск обложки (files/covers/games/Название_файла.ext) ---
         game_filename = file_path.stem
         covers_dir = vault_path / settings.COVERS_GAMES_PATH
         detected_cover = None
@@ -50,7 +65,7 @@ class GameTransformer:
                     detected_cover = str(potential_file.relative_to(vault_path))
                     break
 
-        # 2. Обработка play_log (превращаем список из YAML в строку "||")
+        # --- 3. Обработка play_log (превращаем список из YAML в строку "||") ---
         raw_log = meta.get("play_log", [])
         if isinstance(raw_log, list):
             # Фильтруем пустые записи и склеиваем
@@ -58,38 +73,46 @@ class GameTransformer:
         else:
             play_log_str = str(raw_log) if raw_log else None
 
-        # 3. Сборка модели
+        # --- 4. Сборка модели ---
         return Game(
             title=meta.get("title", file_path.stem),
             title_orig=meta.get("title_orig"),
+            
             year=int(meta.get("year", 0)),
             status=meta.get("status", "plan"),
             genres=str(meta.get("genres", "")),
             series=meta.get("series"),
+            
+            # Информация о покупке игры
             price=int(meta.get("price", 0)) if meta.get("price") else None,
             purchase_date=str(meta.get("purchase_date", None)),
             digital_dist=meta.get("digital_dist", None),
             
-            developer=meta.get("developer", "Unknown"),
-            publisher=meta.get("publisher", "Unknown"),
-            country=meta.get("country", "Unknown"),
+            # Компания Разработчика и Издателя
+            developer = meta.get("developer"),
+            country_dev = meta.get("country_dev"),
+            publisher = meta.get("publisher"),
+            country_pub = meta.get("country_pub"),
             
+            # Кол-во часов и Процент достижений
             hours_played=float(meta.get("hours_played", 0.0)),
             hours_to_beat=float(meta.get("hours_to_beat", 0.0)) if meta.get("hours_to_beat") else None,
             percent_achievements=int(meta.get("percent_achievements", 0)),
             
+            # Логи игровых сессий
             play_log=play_log_str, 
 
+            # Цвета и Обложка
             bg_color=str(meta.get("bg_color", "#ffffff")),
             text_color=str(meta.get("text_color", "#000000")),
             cover=detected_cover,
             
-            # Внешние ID
+            # Внешние Рейтинги и ID с сайта IGDB
             metacritic=meta.get("metacritic"),
             steam=meta.get("steam"),
             igdb=str(meta.get("igdb", "")) if meta.get("igdb") else None,
             
-            # Рейтинги
+            # Рейтинги (10 параметров)
             rating_optimization=meta.get("rating_optimization", 0),
             rating_graphics=meta.get("rating_graphics", 0),
             rating_audio=meta.get("rating_audio", 0),

@@ -9,7 +9,6 @@ from src.core.logger import logger
 from .models import TimeLog
 
 # Регулярка для строки: - Сервис (Предмет | Тэг) - Время
-# Группы: service, subject, tag, duration
 TIME_LINE_PATTERN = re.compile(
     r"^-\s+(?P<service>[^(]+)\((?P<subject>[^|]+)\|\s*(?P<tag>[^)]+)\)\s*-\s*(?P<duration>.*)$",
     re.M
@@ -22,7 +21,7 @@ class TimeTransformer:
     def extract_logs(content: str, daily_id: str) -> list[TimeLog]:
         """Находит секцию 'Время' и парсит все подходящие строки."""
         
-        # 1. Вырезаем блок "## ⏳ Время" до следующего заголовка ## или разделителя ---
+        # --- 1. Вырезаем блок "## ⏳ Время" до следующего заголовка ## или разделителя --- ---
         block_match = re.search(
             r"(?m)^##\s+.*?Время.*?\n([\s\S]+?)(?=\n##|---|\Z)", 
             content
@@ -32,10 +31,10 @@ class TimeTransformer:
             logger.warning("Блок Время не найден в заметке.")
             return []
 
+        # --- 2. Итерируемся по каждой строке блока ---
         block_text = block_match.group(1).strip()
         logs = []
-
-        # 2. Итерируемся по каждой строке блока
+        
         for line in block_text.split('\n'):
             line = line.strip()
             if not line.startswith('-'):
@@ -45,7 +44,6 @@ class TimeTransformer:
             match = TIME_LINE_PATTERN.match(line)
             if match:
                 data = match.groupdict()
-                #logger.debug(f"Данные времени: {data["service"]}, {data["subject"]}, {data["tag"]}, {data["duration"]}")
                 
                 duration_mins = parse_duration_to_minutes(data["duration"])
                 if duration_mins == 0:

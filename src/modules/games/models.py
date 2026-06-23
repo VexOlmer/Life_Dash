@@ -16,21 +16,26 @@ class Game(SQLModel, table=True):
     
     id: int | None = Field(default=None, primary_key=True)
 
-    # Основная информация (YAML)
     title: str
     title_orig: str | None = None
+    
     year: int
     status: str = "plan"
     genres: str
     series: str | None = None
+    
+    # Информация о покупке игры
     price: int | None = None
-    purchase_date: str | None = None  # dd.mm.yyyy
+    purchase_date: str | None = None  # В заметке dd.mm.yyyy, в БД ISO формат
     digital_dist: str | None = None
     
+    # Компания Разработчика и Издателя
     developer: str = "Unknown"
+    country_dev: str = "Unknown"
     publisher: str = "Unknown"
-    country: str = "Unknown"
+    country_pub: str = "Unknown"
     
+    # Кол-во часов и Процент достижений
     hours_played: float = 0.0
     hours_to_beat: float | None = None
     percent_achievements: int = 0
@@ -50,8 +55,10 @@ class Game(SQLModel, table=True):
     rating_expected_real: float
     rating_cult_status: float
     
+    # Общий рейтинг (сумма 10 параметров)
     total_rating: float = Field(default=0.0)
     
+    # Цвет фона и текста
     bg_color: str = Field(default="#ffffff")
     text_color: str = Field(default="#000000")
     
@@ -68,7 +75,33 @@ class Game(SQLModel, table=True):
     last_modified: float
     created_at: str
     
-    model_config = ConfigDict(validate_assignment=True)
+    model_config = ConfigDict(
+        validate_assignment=True
+    )
+    
+    def _parse_date(self, date_str: str | None) -> datetime | None:
+        """
+            Преобразование даты в ISO формат.
+            
+            Args:
+                date_str: Строковое представление даты.
+            
+            Returns:
+                datetime | None: Дата ISO формате, при ошибке преобразования None
+        """
+        
+        if not date_str or len(date_str) < 10 or date_str == "None":
+            logger.warning(f"Ошибка парсинга даты - {date_str}. Дата пустая или меньше 10 символов.")
+            return None
+        
+        try:
+            if "-" in date_str:
+                return datetime.strptime(date_str[:10], "%Y-%m-%d")
+            
+            return datetime.strptime(date_str[:10], "%d.%m.%Y")
+        except Exception as e:
+            logger.warning(f"Ошибка парсинга даты - {date_str}. Ошибка - {e}")
+            return None
 
     # --- Валидаторы ---
     @field_validator("bg_color", "text_color", mode="before")
@@ -109,7 +142,6 @@ class Game(SQLModel, table=True):
             return f"{y}-{m}-{d}"
         return v_str
 
-
     def __init__(self, **data: Any) -> None: # noqa: ANN401
         """Рассчитываем общий рейтинг по 10 параметрам."""
         
@@ -118,14 +150,12 @@ class Game(SQLModel, table=True):
             "rating_price_quality", "rating_story_lore", "rating_immersion", 
             "rating_replayability", "rating_expected_real", "rating_cult_status"
         ]
-        total = sum(float(data.get(k, 0.0) or 0.0) for k in rating_keys)
+        total = sum(float(data.get(k, 0.0) or 0.0) for k in rating_keys)        
         data["total_rating"] = total
         super().__init__(**data)
         
         self.total_rating = total
 
-
-    # --- Свойства ---
     @property
     def is_perfect(self) -> bool:
         """Игра пройдена на 100% достижений."""
@@ -295,20 +325,6 @@ class Game(SQLModel, table=True):
         return sessions
 
     # --- Аналитика Дат (Бэклог и Финал) ---
-    def _parse_date(self, date_str: str | None) -> datetime | None:
-        if not date_str or len(date_str) < 10 or date_str == "None":
-            logger.warning(f"Ошибка парсинга даты - {date_str}. Дата пустая или меньше 10 символов.")
-            return None
-        
-        try:
-            # Пытаемся распарсить ГГГГ-ММ-ДД
-            if "-" in date_str:
-                return datetime.strptime(date_str[:10], "%Y-%m-%d")
-            # Пытаемся распарсить ДД.ММ.ГГГГ (на случай старых данных)
-            return datetime.strptime(date_str[:10], "%d.%m.%Y")
-        except Exception as e:
-            logger.warning(f"Ошибка парсинга даты - {date_str}. Ошибка - {e}")
-            return None
 
     @property
     def days_in_backlog(self) -> int | None:
@@ -319,9 +335,11 @@ class Game(SQLModel, table=True):
             logger.warning(f"Невозможно определить кол-во дней с моментам покупки до первого запуска. \
                            Либо не указана дата покупки, либо не указаны игровые сессии. Заметка - {self.file_path}")
             return None
+                
+        first_session_date = self._parse_date(str(s[0]["start"]))
         
-        first_session_date = self._parse_date(s[0]["start"])
         if not first_session_date:
+            logger.debug("Невозможно подсчитать кол-во дней с покупки до первой сессии, так как не указана дата ее начала.")
             return None
         
         delta = (first_session_date - p_date).days

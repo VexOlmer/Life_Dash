@@ -48,7 +48,7 @@ class DailyTransformer:
         meta = post.metadata
         filename = file_path.name
         
-        # 1. Дата (Имя файла)
+        # --- 1. Дата (Имя файла) ---
         # Конвертация даты: 17-06-2026 -> 2026-06-17
         try:
             date_obj = datetime.strptime(file_path.stem, "%d-%m-%Y")
@@ -56,12 +56,12 @@ class DailyTransformer:
         except ValueError as e:
             raise ValidationError(f"Имя файла должно быть в формате DD-MM-YYYY: {filename}.") from e
         
-        # 2. Город
+        # --- 2. Город ---
         city = meta.get("city")
         if not city or city == "Unknown":
             raise ValidationError(f"[{filename}] Поле 'city' в YAML не заполнено")
 
-        # 3. Сон
+        # --- 3. Сон ---
         # Обязательное наличие Лег и Встал, опциональное Дневной сон
         sleep_from, sleep_to, nap_mins = None, None, 0
         if re.search(r"(?m)^##.*Сон", content):
@@ -76,7 +76,6 @@ class DailyTransformer:
             if sleep_from in ["—", "-", ":"] or sleep_to in ["—", "-", ":"]:
                 raise ValidationError(f"[{filename}] Поля Сна не заполнены или имеют неверный формат")
             
-            # Ищем саму строку "Дневной сон"
             nap_line_match = re.search(r"- Дневной сон:\s*(.*)$", content, re.M)
             
             if nap_line_match:
@@ -91,7 +90,7 @@ class DailyTransformer:
                 # Самой строки нет — это нормально, пишем 0
                 nap_mins = 0
         
-        # 3. Дневник самоконтроля
+        # --- 4. Дневник самоконтроля ---
         morning_workout, added_sugar = None, None
         if re.search(r"(?m)^##.*Дневник самоконтроля", content):
             m_w = re.search(r"^-\s*.*Утренняя разминка:\s*(.+)$", content, re.M)
@@ -111,9 +110,11 @@ class DailyTransformer:
                     f"Дополнительный сахар='{added_sugar}'. Допустимы только 'Да' или 'Нет'."
                 )
 
-        # 4. Личные показатели
-        metrics = {"w": None, "bmi": None, "fat": None, "mus": None, "vis": None}
-        if re.search(r"(?m)^##.*Личные показатели", content):
+        # --- 5. Весовые показатели ---
+        metrics: dict[str, float | None] = {
+            "w": None, "bmi": None, "fat": None, "mus": None, "vis": None
+        }
+        if re.search(r"(?m)^##.*Весовые показатели", content):
             w = re.search(r"- Вес:\s*([\d.]+)\s*кг$", content, re.M)
             bmi = re.search(r"- ИМТ:\s*([\d.]+)\s*$", content, re.M)
             fat = re.search(r"- Жира:\s*([\d.]+)\s*%$", content, re.M)
@@ -128,7 +129,7 @@ class DailyTransformer:
                 "fat": float(fat.group(1)), "mus": float(mus.group(1)), "vis": float(vis.group(1))
             }
             
-        # 5. Общая активность
+        # --- 6. Общая активность ---
         steps_val, calories_val = None, None
         
         # Ищем блок между комментариями START и END
@@ -160,7 +161,7 @@ class DailyTransformer:
             except ValueError as e:
                 raise ValidationError(f"[{file_path.name}] Шаги и Калории должны быть целыми числами без лишних символов.") from e
 
-        # 6. Болезнь
+        # --- 7. Болезнь ---
         ill_state_val, temp_val = None, None
         
         # Ищем блок болезни. Паттерн теперь учитывает:
@@ -190,7 +191,7 @@ class DailyTransformer:
             if not (ill_state_val and temp_val):
                 raise ValidationError(f"[{file_path.name}] Оба показетеля блока болезни должны быть заполнены.")
         
-        # 6. Мысли
+        # --- 7. Мысли ---
         has_content = False
         content_match = re.search(r"##\s*.*Мысли.*\n([\s\S]+?)(?=\n##|---|$)", content)
 
@@ -203,10 +204,11 @@ class DailyTransformer:
             if len(clean_text) > 5:
                 has_content = True
                 
-        # 7. Временные логи
+        # --- 9. Временные логи ---
         time_logs = TimeTransformer.extract_logs(content, db_date_str)
         logger.info(f"Найдено {len(time_logs)} временных логов в заметке.")
 
+        # --- 10. Финальное построение модели Ежедневной заметки ---
         note = DailyNote(
             date=db_date_str,
             city=meta.get("city", "Unknown"),

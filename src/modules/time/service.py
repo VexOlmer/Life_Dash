@@ -15,10 +15,11 @@ class TimeService:
     """Сервис обработки данных временных логов из БД."""
     
     @staticmethod
-    def get_weekly_budget_stats(session: Session) -> dict[str: str, int]:
+    def get_weekly_budget_stats(session: Session) -> list[dict[str, any]]:
         """Расчет прогресса по бюджетам за ТЕКУЩУЮ неделю."""
+        
+        # --- 1. Находим понедельник текущей недели ---
         today = date.today()
-        # Находим понедельник текущей недели
         start_of_week = today - timedelta(days=today.weekday())
         end_of_week = start_of_week + timedelta(days=6)
         
@@ -28,7 +29,7 @@ class TimeService:
         )
         logs = session.exec(statement).all()
         
-        # Группировка по категориям
+        # --- 2. Группировка по категориям ---
         tag_to_cat = {tag: cat for cat, tags in settings.TIME_CATEGORIES.items() for tag in tags}
         cat_stats = {cat: 0 for cat in settings.TIME_CATEGORIES}
         
@@ -37,6 +38,7 @@ class TimeService:
             if cat in cat_stats:
                 cat_stats[cat] += log.duration_minutes
 
+        # --- 3. Рассчеты бюджетов ---
         budgets = []
         for cat, goal_hours in settings.TIME_BUDGETS.items():
             actual_hours = cat_stats.get(cat, 0) / 60
@@ -51,7 +53,7 @@ class TimeService:
         return budgets
     
     @staticmethod
-    def get_monthly_stats(session: Session, year: int, month: int) -> dict[dict | int]:
+    def get_monthly_stats(session: Session, year: int, month: int) -> dict[str, dict]:
         """
             Формирование статистики потраченного времени за месяц.
         
@@ -61,15 +63,15 @@ class TimeService:
                 month: Номер месяца.
             
             Returns:
-                dict[dict | int]: Словарь с данными по месяцу.
+                dict[str, dict]: Словарь с данными по месяцу.
         """
         
-        # 1. Определяем диапазон дат
+        # --- 1. Определяем диапазон дат ---
         start_date = f"{year}-{month:02d}-01"
         last_day = calendar.monthrange(year, month)[1]
         end_date = f"{year}-{month:02d}-{last_day}"
 
-        # 2. Получаем все логи за месяц
+        # --- 2. Получаем все логи за месяц ---
         statement = select(TimeLog).where(
             TimeLog.daily_id >= start_date,
             TimeLog.daily_id <= end_date
@@ -77,7 +79,7 @@ class TimeService:
         logs = session.exec(statement).all()
 
         # Теги, для которых мы ищем связи в БД
-        LINKABLE_TAGS = ["reading", "gaming", "movie", "series"]
+        linkable_tags  = ["reading", "gaming", "movie", "series"]
 
         stats = {
             "total_minutes": 0,
@@ -87,7 +89,7 @@ class TimeService:
             "daily_totals": {i: 0 for i in range(1, last_day + 1)}, 
             "logs": [] 
         }
-
+        
         # Предзагрузка маппингов (только для игр и книг)
         books_map = {b.title.lower(): b.id for b in session.exec(select(Book)).all()}
         games_map = {g.title.lower(): g.id for g in session.exec(select(Game)).all()}
@@ -108,9 +110,9 @@ class TimeService:
             day = int(log.daily_id.split("-")[2])
             stats["daily_totals"][day] += mins
 
-            # --- ЛОГИКА СВЯЗЕЙ (пункт 2) ---
+            # Связь с существующими заметками
             link = None
-            if tag in LINKABLE_TAGS:
+            if tag in linkable_tags :
                 subject_l = log.subject.lower()
                 if tag == "reading" and subject_l in books_map:
                     link = f"/books/{books_map[subject_l]}"
@@ -129,7 +131,7 @@ class TimeService:
 
         return {
             "summary": stats,
-            "budgets": TimeService.get_weekly_budget_stats(session), # Передаем сюда же
+            "budgets": TimeService.get_weekly_budget_stats(session),
             "total_hours": round(stats["total_minutes"] / 60, 1),
             "charts": {
                 "days": list(stats["daily_totals"].keys()),
