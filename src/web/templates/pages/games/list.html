@@ -225,10 +225,22 @@
             <div>{{ game.steam|int if game.steam else "—" }}</div>
             <div>{{ game.metacritic|int if game.metacritic else "—" }}</div>
             <div style="font-weight: 700;">{{ game.year }}</div>
+
             <div style="font-weight: 800;">{{ "{:,}".format(game.price).replace(",", " ") if (game.price or 0) else "—" }}</div>
             <div style="font-size: 0.8rem; opacity: 0.8;">{{ game.purchase_date_ru }}</div>
             <div style="font-weight: 800;">{{ game.hours_played|round(1) }}ч</div>
-            <div style="font-weight: 800;">{{ game.percent_achievements }}%</div>
+
+            <div style="font-weight: 800; font-size: 0.9rem;">
+                {% if game.achievements %}
+                    {{ game.achievements }}
+                    <small style="display: block; font-size: 0.6rem; opacity: 0.5; font-weight: 600;">
+                        ({{ game.percent_achievements }}%)
+                    </small>
+                {% else %}
+                    <span style="color: #cbd5e1;">—</span>
+                {% endif %}
+            </div>
+
             <div style="display: flex; justify-content: center;">
                 <span class="status-pill dynamic-pill {{ 'status-watched' if game.status == 'watched' }}" 
                     style="{% if game.is_perfect %}background: #f59e0b !important; color: white !important;{% endif %}">

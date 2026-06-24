@@ -105,7 +105,7 @@ TRANSLATIONS: dict[str, str] = {
        
     # Доп жанры из игр
     "shooter": "Шутер",
-    "rpg": "RPG",
+    "rpg": "РПГ",
     "strategy": "Стратегия",
     "simulation": "Симулятор",
     "sports": "Спортивная",
@@ -118,10 +118,12 @@ TRANSLATIONS: dict[str, str] = {
     "zombie": "Зомби",
     "graphic adventure": "Квест",
     "interactive drama": "Интерактивное кино",
-    "soulslike": "Soulslike",
+    "soulslike": "Соулс",
     "vr": "VR",
     "indie": "Инди",
     "pixel-art": "Пиксель-арт",
+    "tactical": "Тактическая",
+    "superhero": "Супергеройка", 
 
     # Доп рейтинги из игр
     "rating_optimization": "Оптимизация",

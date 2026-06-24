@@ -1,5 +1,6 @@
 """Модели данных для модуля игр."""
 
+import math
 import re
 from datetime import datetime
 from typing import Any
@@ -8,6 +9,7 @@ from pydantic import ConfigDict, field_validator
 from sqlmodel import Field, SQLModel
 
 from src.common.utils import translate
+from src.core.exceptions import ValidationError
 from src.core.logger import logger
 
 
@@ -35,10 +37,11 @@ class Game(SQLModel, table=True):
     publisher: str = "Unknown"
     country_pub: str = "Unknown"
     
-    # Кол-во часов и Процент достижений
+    # Кол-во часов и Достижения
     hours_played: float = 0.0
     hours_to_beat: float | None = None
-    percent_achievements: int = 0
+    achievements: str | None = Field(default=None)
+    percent_achievements: int | None = Field(default=None)
     
     # Формат в БД: "Даты | Часы | Платформа | Коммент || ..."
     play_log: str | None = Field(default=None)
@@ -132,13 +135,15 @@ class Game(SQLModel, table=True):
         if not v or v == "None" or v == "":
             return None
         v_str = str(v).strip()
+        
         # Если дата уже в формате ГГГГ-ММ-ДД (например, после обновления), оставляем
         if re.match(r"\d{4}-\d{2}-\d{2}", v_str):
             return v_str
+        
         # Если дата в формате ДД.ММ.ГГГГ, переворачиваем для базы
-        match = re.match(r"(\d{2})\.(\d{2})\.(\d{4})", v_str)
-        if match:
-            d, m, y = match.groups()
+        match_data = re.match(r"(\d{2})\.(\d{2})\.(\d{4})", v_str)
+        if match_data:
+            d, m, y = match_data.groups()
             return f"{y}-{m}-{d}"
         return v_str
 
@@ -160,6 +165,28 @@ class Game(SQLModel, table=True):
     def is_perfect(self) -> bool:
         """Игра пройдена на 100% достижений."""
         return self.percent_achievements == 100
+    
+    @staticmethod
+    def calculate_percentage(val: str | None) -> int | None:
+        """Парсит строку '50/75' и возвращает процент с округлением вверх."""
+        if not val or "/" not in str(val):
+            return None
+        try:
+            current, total = map(float, val.split("/"))
+            
+            if current > total:
+                raise ValidationError(
+                    f"Ошибка в достижениях: выполненных ({int(current)}) "
+                    f"больше, чем всего ({int(total)})."
+                )
+            
+            if total == 0:
+                return 0
+            
+            # Округление в большую сторону (ceil)
+            return math.ceil((current / total) * 100)
+        except (ValueError, ZeroDivisionError) as e:
+            raise ValidationError(f"Некорректный формат достижений: '{val}'. Ожидается 'число/число'") from e
 
     @property
     def genres_list_ru(self) -> list[str]:

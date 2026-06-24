@@ -42,7 +42,7 @@ class GameTransformer:
         required_fields = [
             "title_orig", "year", "status", "genres",
             "developer", "country_dev", "publisher", "country_pub",
-            "hours_played", "hours_to_beat", "percent_achievements",
+            "hours_played", "hours_to_beat",
             "play_log", "bg_color", "text_color",
             "metacritic", "steam", "igdb",
             "rating_optimization", "rating_graphics", "rating_audio", "rating_gameplay",
@@ -72,8 +72,13 @@ class GameTransformer:
             play_log_str = " || ".join([str(e).strip() for e in raw_log if e])
         else:
             play_log_str = str(raw_log) if raw_log else None
+            
+        # --- 4. Обработка достижений ---
+        raw_achievements = meta.get("achievements") 
+        achievements_str = str(raw_achievements).strip() if raw_achievements is not None else None
+        percent_achievements = Game.calculate_percentage(achievements_str)
 
-        # --- 4. Сборка модели ---
+        # --- 5. Сборка модели ---
         return Game(
             title=meta.get("title", file_path.stem),
             title_orig=meta.get("title_orig"),
@@ -97,10 +102,11 @@ class GameTransformer:
             # Кол-во часов и Процент достижений
             hours_played=float(meta.get("hours_played", 0.0)),
             hours_to_beat=float(meta.get("hours_to_beat", 0.0)) if meta.get("hours_to_beat") else None,
-            percent_achievements=int(meta.get("percent_achievements", 0)),
+            achievements=achievements_str,
+            percent_achievements=percent_achievements,
             
             # Логи игровых сессий
-            play_log=play_log_str, 
+            play_log=play_log_str,
 
             # Цвета и Обложка
             bg_color=str(meta.get("bg_color", "#ffffff")),
