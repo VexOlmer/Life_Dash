@@ -42,7 +42,7 @@ class GameTransformer:
         required_fields = [
             "title_orig", "release_date", "status", "genres",
             "developer", "country_dev", "publisher", "country_pub",
-            "hours_played", "hours_to_beat",
+            "hours_played",
             "play_log", "bg_color", "text_color",
             "metacritic", "steam", "igdb",
             "rating_optimization", "rating_graphics", "rating_audio", "rating_gameplay",
@@ -101,7 +101,6 @@ class GameTransformer:
             
             # Кол-во часов и Процент достижений
             hours_played=float(meta.get("hours_played", 0.0)),
-            hours_to_beat=float(meta.get("hours_to_beat", 0.0)) if meta.get("hours_to_beat") else None,
             achievements=achievements_str,
             percent_achievements=percent_achievements,
             

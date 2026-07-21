@@ -39,7 +39,6 @@ class Game(SQLModel, table=True):
     
     # Кол-во часов и Достижения
     hours_played: float = 0.0
-    hours_to_beat: float | None = None
     achievements: str | None = Field(default=None)
     percent_achievements: int | None = Field(default=None)
     
@@ -254,30 +253,6 @@ class Game(SQLModel, table=True):
             
         # Если это локальный файл из Vault
         return f"/vault/{self.cover}"
-    
-    @property
-    def progress_percent(self) -> int:
-        """
-            Рассчитывает процент прохождения.
-            
-            Приоритет:
-                1. Если игра завершена (finished), всегда 100%.
-                2. Если игра в процессе и есть эталон (hours_to_beat), считаем долю.
-                3. Если эталона нет, но статус finished - 100%, иначе 0%.
-        """
-        
-        # Если игра завершена ИЛИ просмотрена — это 100%
-        if self.status in ["finished", "watched"]:
-            return 100
-        
-        # Если игра брошена, мы всё равно хотим видеть, как далеко ты зашел
-        # Или если она в процессе (playing)
-        if self.hours_to_beat and self.hours_to_beat > 0:
-            percent = round((self.hours_played / self.hours_to_beat) * 100)
-            return min(percent, 100)
-        
-        # Во всех остальных случаях (план или нет данных)
-        return 0
 
     # --- Обработка read_log ---
     @property
@@ -326,8 +301,9 @@ class Game(SQLModel, table=True):
                 # 4. Комментарий (опционально)
                 comment = parts[3] if len(parts) > 3 and parts[3] else f"Сессия {i}"
                 
-                # Поиск знака завершения сюжета
+                # Поиск знака завершения сюжета и 100% завершения
                 is_completion = "!" in comment
+                is_perfect_session = "100%" in comment
                 
                 # --- Определение статуса сессии ---
                 is_last = (i == total_entries)
@@ -356,6 +332,7 @@ class Game(SQLModel, table=True):
                     "platform": platform,
                     "comment": comment.replace("!", "").strip() or f"Сессия {i}",
                     "is_completion": is_completion,
+                    "is_perfect_session": is_perfect_session,
                     "session_status": session_status, # "dropped", "playing" или None
                     "days": None,
                     "pace": None
