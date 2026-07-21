@@ -99,7 +99,7 @@ class ExportService:
                 g.total_rating, g.title, g.developer, g.country_dev, g.publisher, g.country_pub,
                 g.rating_optimization, g.rating_graphics, g.rating_audio, g.rating_gameplay, g.rating_price_quality,
                 g.rating_story_lore, g.rating_immersion, g.rating_replayability, g.rating_expected_real, g.rating_cult_status,
-                genres_str, g.steam, g.metacritic, g.year, g.hours_played, g.percent_achievements, g.status_ru
+                genres_str, g.steam, g.metacritic, g.release_date_ru, g.hours_played, g.percent_achievements, g.status_ru
             ]
             ws_games.append(row)
             

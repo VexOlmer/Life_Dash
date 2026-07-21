@@ -148,7 +148,7 @@ async def list_games(
         # Основные метрики
         "total_rating": "Общий рейтинг",
         "hours_played": "Наиграно часов",
-        "year": "Год выхода",
+        "release_date": "Дата выхода",
         "price": "Цена (руб)",
         "purchase_date": "Дата покупки",
         "percent_achievements": "Процент достижений",

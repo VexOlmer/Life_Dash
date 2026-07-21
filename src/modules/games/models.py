@@ -21,7 +21,7 @@ class Game(SQLModel, table=True):
     title: str
     title_orig: str | None = None
     
-    year: int
+    release_date: str | None = Field(default=None)
     status: str = "plan"
     genres: str
     series: str | None = None
@@ -146,6 +146,23 @@ class Game(SQLModel, table=True):
             d, m, y = match_data.groups()
             return f"{y}-{m}-{d}"
         return v_str
+    
+    @field_validator("release_date", mode="before")
+    @classmethod
+    def validate_release_date(cls, v: Any) -> str | None:
+        """Валидация даты выхода игры."""
+        if not v or v == "None" or v == "":
+            return None
+        v_str = str(v).strip()
+        
+        if re.match(r"\d{4}-\d{2}-\d{2}", v_str):
+            return v_str
+        
+        match_data = re.match(r"(\d{2})\.(\d{2})\.(\d{4})", v_str)
+        if match_data:
+            d, m, y = match_data.groups()
+            return f"{y}-{m}-{d}"
+        return v_str
 
     def __init__(self, **data: Any) -> None: # noqa: ANN401
         """Рассчитываем общий рейтинг по 10 параметрам."""
@@ -202,14 +219,27 @@ class Game(SQLModel, table=True):
     
     @property
     def purchase_date_ru(self) -> str:
-        """Вывод даты на сайте в привычном формате."""
+        """Вывод даты покупки игры."""
         if not self.purchase_date or self.purchase_date == "None":
             return "—"
+        
         # Конвертируем обратно из ГГГГ-ММ-ДД в ДД.ММ.ГГГГ
         parts = self.purchase_date.split("-")
         if len(parts) == 3:
             return f"{parts[2]}.{parts[1]}.{parts[0]}"
         return self.purchase_date
+
+    @property
+    def release_date_ru(self) -> str:
+        """Вывод даты выхода игры."""
+        if not self.release_date or self.release_date == "None":
+            return "—"
+        
+        # Конвертируем обратно из ГГГГ-ММ-ДД в ДД.ММ.ГГГГ
+        parts = self.release_date.split("-")
+        if len(parts) == 3:
+            return f"{parts[2]}.{parts[1]}.{parts[0]}"
+        return self.release_date
 
     @property
     def cover_url(self) -> str:   

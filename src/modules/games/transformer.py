@@ -40,7 +40,7 @@ class GameTransformer:
         
         # --- 1. Проверка обязательных полей для шаблона заметки игры ---
         required_fields = [
-            "title_orig", "year", "status", "genres",
+            "title_orig", "release_date", "status", "genres",
             "developer", "country_dev", "publisher", "country_pub",
             "hours_played", "hours_to_beat",
             "play_log", "bg_color", "text_color",
@@ -83,7 +83,7 @@ class GameTransformer:
             title=meta.get("title", file_path.stem),
             title_orig=meta.get("title_orig"),
             
-            year=int(meta.get("year", 0)),
+            release_date=str(meta.get("release_date", None)),
             status=meta.get("status", "plan"),
             genres=str(meta.get("genres", "")),
             series=meta.get("series"),

@@ -171,7 +171,7 @@
             <span>Жанры</span>
             <span>St</span>
             <span>Mc</span>
-            <span>Год</span>
+            <span>Дата вых.</span>
             <span>Цена</span>
             <span>Куплено</span>
             <span>Часы</span>
@@ -224,7 +224,7 @@
 
             <div>{{ game.steam|int if game.steam else "—" }}</div>
             <div>{{ game.metacritic|int if game.metacritic else "—" }}</div>
-            <div style="font-weight: 700;">{{ game.year }}</div>
+            <div style="font-weight: 700;">{{ game.release_date_ru }}</div>
 
             <div style="font-weight: 800;">{{ "{:,}".format(game.price).replace(",", " ") if (game.price or 0) else "—" }}</div>
             <div style="font-size: 0.8rem; opacity: 0.8;">{{ game.purchase_date_ru }}</div>
