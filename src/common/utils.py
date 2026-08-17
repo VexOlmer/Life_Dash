@@ -124,6 +124,8 @@ TRANSLATIONS: dict[str, str] = {
     "pixel-art": "Пиксель-арт",
     "tactical": "Тактическая",
     "superhero": "Супергеройка", 
+    "adult": "Взрослая",
+    "visual novel": "Визуальная новелла",
 
     # Доп рейтинги из игр
     "rating_optimization": "Оптимизация",
